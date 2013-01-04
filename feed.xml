@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:wfw="http://wellformedweb.org/CommentAPI/" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>   
+    <title>Raspberry Pie</title>
+    <atom:link href="http://cellux.github.com/feed.xml" rel="self" type="application/rss+xml"></atom:link>
+    <link>http://cellux.github.com</link>
+    <description>My personal adventures in the world of the Raspberry Pi</description>
+    <pubDate>Thu, 03 Jan 2013 22:25:00 +0100</pubDate>
+    <generator>The mighty Wintersmith</generator>
+    <language>en</language>
+    <item>
+      <title>My first day with the Raspberry Pi</title>
+      <link>http://cellux.github.com/articles/my-first-day-with-the-raspberry-pi/</link>
+      <pubDate>Thu, 03 Jan 2013 22:25:00 +0100</pubDate>
+      <guid isPermaLink="true">http://cellux.github.com/articles/my-first-day-with-the-raspberry-pi/</guid>
+      <author></author>
+      <description>&lt;p&gt;At the end of 2012 - just a day or two before Christmas - I got my own Raspberry Pi from RS Components. 
+
+&lt;/p&gt;
+&lt;p&gt;The first thing I did was building a LEGO case for it:
+
+&lt;/p&gt;
+&lt;p&gt;It&apos;s not a top engineering feat, but I like the spaceman, it&apos;s kinda cool I think.
+
+&lt;/p&gt;
+&lt;p&gt;For those of you who don&apos;t know what a Raspberry Pi is: it&apos;s a credit-card sized mini-computer developed by a bunch of elite computer geeks who call themselves the Raspberry Pi Foundation. It looks like this:
+
+&lt;/p&gt;
+&lt;p&gt;It has an SD card reader, two USB 2.0 ports, a 10/100 Ethernet port, a HDMI connector, an RCA video out, a 3.5 mm audio jack and a bunch of programmable pins which can be used to interface it with other devices. It can be powered through a micro USB port, using any telephone charger which can supply the steady 5V and 700 mA it needs.
+
+&lt;/p&gt;
+&lt;p&gt;The heart of the machine is this SoC (System on a Chip) in the center of the board:
+
+&lt;/p&gt;
+&lt;p&gt;This small chip contains an ARM 1176JZF-S CPU, a Broadcom VideoCore IV GPU and 512 MB RAM (these are the specs for my Model B - there is also a Model A with only 256 MB RAM, one USB port and no Ethernet).
+
+&lt;/p&gt;
+&lt;p&gt;The Pi uses an SD card for persistent storage, but USB hard drives may be also hooked up, provided they are externally powered.
+
+&lt;/p&gt;
+&lt;p&gt;To minimize the cost, there is no on/off button or reset switch: the only way to reset the system is to pull the plug and insert it again.
+
+&lt;/p&gt;
+&lt;p&gt;At startup, the VideoCore IV GPU gets control and initiates the boot process which consists of the following steps:
+
+&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;The GPU executes the first stage bootloader which is stored in ROM&lt;/li&gt;
+&lt;li&gt;The first stage bootloader looks for a FAT32 partition on the SD card (this must be the first partition of the possible four) and loads the second stage boot loader from the file &lt;code&gt;bootcode.bin&lt;/code&gt; into the L2 cache&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;bootcode.bin&lt;/code&gt; initializes the 512 MB SDRAM in the SoC, and loads the third stage loader from &lt;code&gt;start.elf&lt;/code&gt; into main memory&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;start.elf&lt;/code&gt; reads the file &lt;code&gt;config.txt&lt;/code&gt; and configures the system accordingly&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;start.elf&lt;/code&gt; reads a kernel command line from &lt;code&gt;cmdline.txt&lt;/code&gt; and a kernel image from &lt;code&gt;kernel.img&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;the GPU passes control to the ARM CPU which starts executing the kernel&lt;/li&gt;
+&lt;li&gt;the kernel mounts a root partition from somewhere (typically from the second partition of the SD card), and runs &lt;code&gt;/sbin/init&lt;/code&gt; as usual&lt;/li&gt;
+&lt;/ol&gt;
+&lt;p&gt;On my first day, I just wanted to make sure that the Pi works as it should, so I downloaded a pre-built Linux distribution image from the foundation&apos;s website and copied it to the SD card:
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;wget http:&lt;span class=&quot;comment&quot;&gt;//downloads.raspberrypi.org/images/raspbian/2012-12-16-wheezy-raspbian/2012-12-16-wheezy-raspbian.zip&lt;/span&gt;
+unzip &lt;span class=&quot;number&quot;&gt;2012&lt;/span&gt;-&lt;span class=&quot;number&quot;&gt;12&lt;/span&gt;-&lt;span class=&quot;number&quot;&gt;16&lt;/span&gt;-wheezy-raspbian.zip
+cat &lt;span class=&quot;number&quot;&gt;2012&lt;/span&gt;-&lt;span class=&quot;number&quot;&gt;12&lt;/span&gt;-&lt;span class=&quot;number&quot;&gt;16&lt;/span&gt;-wheezy-raspbian.img &gt; /dev/sdb&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;where &lt;code&gt;/dev/sdb&lt;/code&gt; was the device corresponding to the SD card which I inserted into my Linux netbook.
+
+&lt;/p&gt;
+&lt;p&gt;After the image has been written to the card, I removed it from my netbook, inserted it into the SD card slot on the Raspberry Pi, connected the HDMI cable to my TV, powered on the gizmo and watched the messages of the kernel - and later Raspbian - flying by, finally followed by a login prompt.
+
+&lt;/p&gt;
+</description>
+    </item>
+  </channel>
+</rss>
