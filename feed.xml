@@ -20,16 +20,25 @@
 &lt;p&gt;The first thing I did was building a LEGO case for it:
 
 &lt;/p&gt;
-&lt;p&gt;It&apos;s not a top engineering feat, but I like the spaceman, it&apos;s kinda cool I think.
+&lt;p&gt;TODO: image
+
+&lt;/p&gt;
+&lt;p&gt;It&apos;s not a top engineering feat for sure, but the spaceman is kinda cool. :-)
 
 &lt;/p&gt;
 &lt;p&gt;For those of you who don&apos;t know what a Raspberry Pi is: it&apos;s a credit-card sized mini-computer developed by a bunch of elite computer geeks who call themselves the Raspberry Pi Foundation. It looks like this:
 
 &lt;/p&gt;
-&lt;p&gt;It has an SD card reader, two USB 2.0 ports, a 10/100 Ethernet port, a HDMI connector, an RCA video out, a 3.5 mm audio jack and a bunch of programmable pins which can be used to interface it with other devices. It can be powered through a micro USB port, using any telephone charger which can supply the steady 5V and 700 mA it needs.
+&lt;p&gt;TODO: image
+
+&lt;/p&gt;
+&lt;p&gt;It has an SD card reader, two USB 2.0 ports, a 10/100 Ethernet port, a HDMI connector, an RCA video out, a 3.5 mm audio jack and a bunch of programmable pins which can be used to interface it with other devices. It can be powered through a micro USB port, using any cell phone charger which can supply the steady 5V and 700 mA it needs.
 
 &lt;/p&gt;
 &lt;p&gt;The heart of the machine is this SoC (System on a Chip) in the center of the board:
+
+&lt;/p&gt;
+&lt;p&gt;TODO: image
 
 &lt;/p&gt;
 &lt;p&gt;This small chip contains an ARM 1176JZF-S CPU, a Broadcom VideoCore IV GPU and 512 MB RAM (these are the specs for my Model B - there is also a Model A with only 256 MB RAM, one USB port and no Ethernet).
@@ -56,7 +65,7 @@
 &lt;p&gt;On my first day, I just wanted to make sure that the Pi works as it should, so I downloaded a pre-built Linux distribution image from the foundation&apos;s website and copied it to the SD card:
 
 &lt;/p&gt;
-&lt;pre&gt;&lt;code&gt;wget http:&lt;span class=&quot;comment&quot;&gt;//downloads.raspberrypi.org/images/raspbian/2012-12-16-wheezy-raspbian/2012-12-16-wheezy-raspbian.zip&lt;/span&gt;
+&lt;pre&gt;&lt;code class=&quot;bash&quot;&gt;wget http:&lt;span class=&quot;comment&quot;&gt;//downloads.raspberrypi.org/images/raspbian/2012-12-16-wheezy-raspbian/2012-12-16-wheezy-raspbian.zip&lt;/span&gt;
 unzip &lt;span class=&quot;number&quot;&gt;2012&lt;/span&gt;-&lt;span class=&quot;number&quot;&gt;12&lt;/span&gt;-&lt;span class=&quot;number&quot;&gt;16&lt;/span&gt;-wheezy-raspbian.zip
 cat &lt;span class=&quot;number&quot;&gt;2012&lt;/span&gt;-&lt;span class=&quot;number&quot;&gt;12&lt;/span&gt;-&lt;span class=&quot;number&quot;&gt;16&lt;/span&gt;-wheezy-raspbian.img &gt; /dev/sdb&lt;/code&gt;&lt;/pre&gt;
 &lt;p&gt;where &lt;code&gt;/dev/sdb&lt;/code&gt; was the device corresponding to the SD card which I inserted into my Linux netbook.

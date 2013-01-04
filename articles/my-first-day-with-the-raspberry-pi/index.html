@@ -5,36 +5,44 @@
     <title>My first day with the Raspberry Pi - Raspberry Pie
     </title>
     <link rel="alternate" href="http://cellux.github.com/feed.xml" type="application/rss+xml" title="My personal adventures in the world of the Raspberry Pi">
-    <link rel="stylesheet" href="http://fonts.googleapis.com/css?family=Fredericka+the+Great">
-    <link rel="stylesheet" href="/css/github.css">
+    <link rel="stylesheet" href="/css/normalize.css">
+    <link rel="stylesheet" href="/css/960.css">
     <link rel="stylesheet" href="/css/main.css">
   </head>
   <body>
-    <header>
-      <div class="inner"><a href="/" class="back"><< back to index</a>
-        <h1>My first day with the Raspberry Pi</h1>
-        <p>written by:<span class="author"><a href="mailto:cellux@omkamra.hu">cellux</a></span>
-        </p>
-      </div>
-    </header>
-    <div id="content">
-      <article class="post">
-        <section class="content"><p>At the end of 2012 - just a day or two before Christmas - I got my own Raspberry Pi from RS Components. 
+    <div class="container_12">
+      <header>
+        <div><img src="/images/raspberry.jpg" width="200"><img src="/images/adventures_in_the_world_of_the_raspberry_pi.png" style="padding-left: 220px"></div>
+        <div><img src="/images/sep.png"></div>
+      </header>
+      <div id="content">
+        <article class="post">
+          <h2>My first day with the Raspberry Pi</h2>
+          <section class="content"><p>At the end of 2012 - just a day or two before Christmas - I got my own Raspberry Pi from RS Components. 
 
 </p>
 <p>The first thing I did was building a LEGO case for it:
 
 </p>
-<p>It&apos;s not a top engineering feat, but I like the spaceman, it&apos;s kinda cool I think.
+<p>TODO: image
+
+</p>
+<p>It&apos;s not a top engineering feat for sure, but the spaceman is kinda cool. :-)
 
 </p>
 <p>For those of you who don&apos;t know what a Raspberry Pi is: it&apos;s a credit-card sized mini-computer developed by a bunch of elite computer geeks who call themselves the Raspberry Pi Foundation. It looks like this:
 
 </p>
-<p>It has an SD card reader, two USB 2.0 ports, a 10/100 Ethernet port, a HDMI connector, an RCA video out, a 3.5 mm audio jack and a bunch of programmable pins which can be used to interface it with other devices. It can be powered through a micro USB port, using any telephone charger which can supply the steady 5V and 700 mA it needs.
+<p>TODO: image
+
+</p>
+<p>It has an SD card reader, two USB 2.0 ports, a 10/100 Ethernet port, a HDMI connector, an RCA video out, a 3.5 mm audio jack and a bunch of programmable pins which can be used to interface it with other devices. It can be powered through a micro USB port, using any cell phone charger which can supply the steady 5V and 700 mA it needs.
 
 </p>
 <p>The heart of the machine is this SoC (System on a Chip) in the center of the board:
+
+</p>
+<p>TODO: image
 
 </p>
 <p>This small chip contains an ARM 1176JZF-S CPU, a Broadcom VideoCore IV GPU and 512 MB RAM (these are the specs for my Model B - there is also a Model A with only 256 MB RAM, one USB port and no Ethernet).
@@ -61,7 +69,7 @@
 <p>On my first day, I just wanted to make sure that the Pi works as it should, so I downloaded a pre-built Linux distribution image from the foundation&apos;s website and copied it to the SD card:
 
 </p>
-<pre><code>wget http:<span class="comment">//downloads.raspberrypi.org/images/raspbian/2012-12-16-wheezy-raspbian/2012-12-16-wheezy-raspbian.zip</span>
+<pre><code class="bash">wget http:<span class="comment">//downloads.raspberrypi.org/images/raspbian/2012-12-16-wheezy-raspbian/2012-12-16-wheezy-raspbian.zip</span>
 unzip <span class="number">2012</span>-<span class="number">12</span>-<span class="number">16</span>-wheezy-raspbian.zip
 cat <span class="number">2012</span>-<span class="number">12</span>-<span class="number">16</span>-wheezy-raspbian.img > /dev/sdb</code></pre>
 <p>where <code>/dev/sdb</code> was the device corresponding to the SD card which I inserted into my Linux netbook.
@@ -71,12 +79,13 @@ cat <span class="number">2012</span>-<span class="number">12</span>-<span class=
 
 </p>
 </section>
-      </article>
-    </div>
-    <footer>
-      <div class="inner">
-        <p>&copy; 2013 cellux</p>
+        </article>
       </div>
-    </footer>
+      <footer>
+        <div class="inner">
+          <p>&nbsp;</p>
+        </div>
+      </footer>
+    </div>
   </body>
 </html>
