@@ -61,7 +61,7 @@
 <ol>
 <li>The GPU executes the first stage bootloader which is stored in ROM</li>
 <li>The first stage bootloader looks for a FAT32 partition on the SD card (this must be the first partition of the possible four) and loads the second stage boot loader from the file <code>bootcode.bin</code> into the L2 cache</li>
-<li><code>bootcode.bin</code> initializes the 512 MB SDRAM in the SoC, and loads the third stage loader from <code>start.elf</code> into main memory</li>
+<li><code>bootcode.bin</code> initializes the 512 MB SDRAM in the SoC, and loads the third stage loader from <code>start.elf</code> into main memory (<code>start.elf</code> contains the GPU firmware as well)</li>
 <li><code>start.elf</code> reads the file <code>config.txt</code> and configures the system accordingly</li>
 <li><code>start.elf</code> reads a kernel command line from <code>cmdline.txt</code> and a kernel image from <code>kernel.img</code></li>
 <li>the GPU passes control to the ARM CPU which starts executing the kernel</li>
