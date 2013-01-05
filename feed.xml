@@ -5,9 +5,126 @@
     <atom:link href="http://cellux.github.com/feed.xml" rel="self" type="application/rss+xml"></atom:link>
     <link>http://cellux.github.com</link>
     <description>My personal adventures in the world of the Raspberry Pi</description>
-    <pubDate>Thu, 03 Jan 2013 22:25:00 +0100</pubDate>
+    <pubDate>Fri, 04 Jan 2013 22:58:00 +0100</pubDate>
     <generator>The mighty Wintersmith</generator>
     <language>en</language>
+    <item>
+      <title>Moving to NFS root</title>
+      <link>http://cellux.github.com/articles/moving-to-nfs-root/</link>
+      <pubDate>Fri, 04 Jan 2013 22:58:00 +0100</pubDate>
+      <guid isPermaLink="true">http://cellux.github.com/articles/moving-to-nfs-root/</guid>
+      <author></author>
+      <description>&lt;p&gt;My first hack was to move the root filesystem from the SD card&apos;s second ext4 partition to a network-accessible directory shared by my router over NFS.
+
+&lt;/p&gt;
+&lt;p&gt;To understand how this hack fits into the grand scheme of things, I&apos;ll have to introduce you to my home network:
+
+&lt;/p&gt;
+&lt;p&gt;&lt;img src=&quot;home_network.png&quot;/&gt;&lt;/p&gt;
+
+&lt;p&gt;On the image you see the following gear:
+
+&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;the Pi (obviously)&lt;/li&gt;
+&lt;li&gt;a Trust 7-port USB hub&lt;/li&gt;
+&lt;li&gt;two external HDDs&lt;/li&gt;
+&lt;li&gt;Huawei USB 3G modem&lt;/li&gt;
+&lt;li&gt;HDMI switch&lt;/li&gt;
+&lt;li&gt;HDMI TV&lt;/li&gt;
+&lt;li&gt;XBox 360&lt;/li&gt;
+&lt;li&gt;TP-Link WR842ND wireless router (with an extra USB port)&lt;/li&gt;
+&lt;li&gt;Asus O!Play media player&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;The Pi draws its power from the Trust USB hub through a simple USB-microUSB cable. After reading a lot of bitter posts about power-related problems, I was quite afraid that this setup wouldn&apos;t work, but fortunately it does.
+
+&lt;/p&gt;
+&lt;p&gt;The TP-Link router was modded: I replaced the factory firmware with &lt;a href=&quot;https://openwrt.org/&quot;&gt;OpenWRT&lt;/a&gt;, a home-grown Linux distribution specially developed for Linux-based routers.
+
+&lt;/p&gt;
+&lt;p&gt;OpenWRT made it possible to share the NTFS filesystems on the two external USB harddrives over Samba (Windows file-sharing) and NFS to the home network, which means the Asus O!Play can now stream HD movies from any of the external disks (via a direct Ethernet connection to the router), and my son can watch his favorite Simpsons episodes from his bed on his Android phone (over WiFi). Internet is provided by the Huawei 3G modem connected to one of the Trust hub&apos;s USB ports.
+
+&lt;/p&gt;
+&lt;p&gt;In order to move the Pi&apos;s root filesystem over to NFS, I needed an ext4 partition which the router can access and share over the network. As the router is not too capable on the storage front (it has only 8 MB of flash memory), I had to create the ext4 filesystem on one of the external disks.
+
+&lt;/p&gt;
+&lt;p&gt;The only way I could do this - without reformatting the drives (remember, we are dealing with NTFS filesystems) - was to create a 8 GB file on one of the disks and then create the ext4 filesystem &lt;em&gt;inside&lt;/em&gt; that file:
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;bash&quot;&gt;opkg install ntfs-&lt;span class=&quot;number&quot;&gt;3&lt;/span&gt;g
+mkdir -p /mnt/shares/samsung
+mount -t ntfs-&lt;span class=&quot;number&quot;&gt;3&lt;/span&gt;g /dev/sda1 /mnt/shares/samsung
+dd &lt;span class=&quot;keyword&quot;&gt;if&lt;/span&gt;=/dev/zero of=/mnt/shares/samsung/rpifs.img bs=&lt;span class=&quot;number&quot;&gt;1&lt;/span&gt;G count=&lt;span class=&quot;number&quot;&gt;8&lt;/span&gt;
+opkg install e2fsprogs
+mkfs.ext4 -F /mnt/shares/samsung/rpifs.img
+opkg install kmod-fs-ext4
+opkg install kmod-loop losetup
+mkdir -p /mnt/shares/rpifs
+mount -t ext4 -o loop /mnt/shares/samsung/rpifs.img /mnt/shares/rpifs&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;(These were all executed on the router. I added the &lt;code&gt;opkg install&lt;/code&gt; commands to let you see which OpenWRT packages were required. Of course the mounts were later recorded into &lt;code&gt;/etc/config/fstab&lt;/code&gt; for auto-mounting.)
+
+&lt;/p&gt;
+&lt;p&gt;While this setup is rather complicated and slow, it works. Ideally, the external disks would form a RAID1 cluster (provided by a NAS device like &lt;a href=&quot;http://www.fantec.de/html/en/2/artId/__1515/gid/__500905309053790537290/article.html&quot;&gt;this&lt;/a&gt;), and the RAID volume would be formatted with ext4 (which is &lt;em&gt;much&lt;/em&gt; faster than &lt;code&gt;ntfs-3g&lt;/code&gt; on Linux).
+
+&lt;/p&gt;
+&lt;p&gt;The next step was to create a suitable root filesystem on &lt;code&gt;/mnt/shares/rpifs&lt;/code&gt;. At first, I just used the files from the default Raspbian installation:
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;bash&quot;&gt;mkdir /tmp/raspbian
+mount -t ext4 -o loop,offset=$((122880*512)) 2012-12-16-wheezy-raspbian.img /tmp/raspbian/
+rsync -av /tmp/raspbian/ /mnt/shares/rpifs/&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;This crazy &lt;code&gt;mount&lt;/code&gt; (or rather &lt;code&gt;losetup&lt;/code&gt;) trick allows you to mount a &lt;em&gt;part&lt;/em&gt; of a disk image - like one of the partitions inside - via a loop device. To make it work, you have to find out where the desired partition starts (byte offset from start of image file) and pass that to mount via the &lt;code&gt;offset&lt;/code&gt; option. You can find &lt;code&gt;fdisk&lt;/code&gt; to find the right number:
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;bash&quot;&gt;[rb@pluto 2012-12-16-wheezy-raspbian]$ fdisk -l 2012-12-16-wheezy-raspbian.img 
+
+Disk 2012-12-16-wheezy-raspbian.img: 1939 MB, 1939865600 bytes, 3788800 sectors
+Units = sectors of 1 * 512 = 512 bytes
+Sector size (logical/physical): 512 bytes / 512 bytes
+I/O size (minimum/optimal): 512 bytes / 512 bytes
+Disk identifier: 0x00017b69
+
+                         Device Boot      Start         End      Blocks   Id  System
+2012-12-16-wheezy-raspbian.img1            8192      122879       57344    c  W95 FAT32 (LBA)
+2012-12-16-wheezy-raspbian.img2          122880     3788799     1832960   83  Linux&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;As you can see, the FAT32 partition (&lt;code&gt;/boot&lt;/code&gt;) comes first, starting at sector #8192, then comes the ext4 fs (&lt;code&gt;/&lt;/code&gt;) at sector #122880. As each sector uses 512 bytes, we&apos;ll have to multiply the sector number by 512 to get the byte offset.
+
+&lt;/p&gt;
+&lt;p&gt;The only thing left was telling the Pi Linux kernel that it should mount its root fs from the router over NFS, instead of locally from the SD card.
+
+&lt;/p&gt;
+&lt;p&gt;As I wrote in the &lt;a href=&quot;http://cellux.github.com/articles/my-first-day-with-the-raspberry-pi/&quot;&gt;previous&lt;/a&gt; post, the Linux kernel gets its command line from the file &lt;code&gt;cmdline.txt&lt;/code&gt; on the &lt;code&gt;/boot&lt;/code&gt; partition (first FAT32 partition of the SD card).
+
+&lt;/p&gt;
+&lt;p&gt;In the Raspbian image which I downloaded, this file has the following contents (also verifiable with the offset mount trick):
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;dwc_otg.lpm_enable=0 console=ttyAMA0,115200 kgdboc=ttyAMA0,115200 console=tty1 root=/dev/mmcblk0p2 rootfstype=ext4 elevator=deadline rootwait&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;This had to be changed like this:
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;dwc_otg.lpm_enable=0 console=ttyAMA0,115200 kgdboc=ttyAMA0,115200 console=tty1 root=/dev/nfs nfsroot=192.168.1.1:/mnt/shares/rpifs ip=dhcp elevator=deadline rootwait&lt;/code&gt;&lt;/pre&gt;
+&lt;ol&gt;
+&lt;li&gt;The &lt;code&gt;root=/dev/nfs&lt;/code&gt; option tells the kernel that the root filesystem is on NFS&lt;/li&gt;
+&lt;li&gt;The &lt;code&gt;ip=dhcp&lt;/code&gt; option makes the kernel configure the primary network interface (eth0) via DHCP (this is a prerequisite for an NFS mount)&lt;/li&gt;
+&lt;li&gt;The &lt;code&gt;nfsroot=192.168.1.1:/mnt/shares/rpifs&lt;/code&gt; defines the location of the root file system&lt;/li&gt;
+&lt;/ol&gt;
+&lt;p&gt;Of course, the &lt;code&gt;/mnt/shares/rpifs&lt;/code&gt; directory had to be shared on the router as well:
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;bash&quot;&gt;opkg install portmap nfs-kernel-server nfs-kernel-server-utils
+&lt;span class=&quot;keyword&quot;&gt;echo&lt;/span&gt; &lt;span class=&quot;string&quot;&gt;'/mnt/shares/rpifs 192.168.1.0/24(rw,no_root_squash,insecure,no_subtree_check,mp)'&lt;/span&gt; &gt;&gt; /etc/exports
+/etc/init.d/nfsd enable
+/etc/init.d/nfsd start&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;After the NFS server was up, I verified that the share can be in fact mounted by entering the following commands on my netbook:
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;bash&quot;&gt;mkdir /tmp/rpifs
+mount -t nfs 192.168.1.1:/mnt/shares/rpifs /tmp/rpifs&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Then I updated &lt;code&gt;cmdline.txt&lt;/code&gt; as described above, restarted the Pi and voilà, the root fs came up over NFS.
+&lt;/p&gt;
+</description>
+    </item>
     <item>
       <title>My first day with the Raspberry Pi</title>
       <link>http://cellux.github.com/articles/my-first-day-with-the-raspberry-pi/</link>
