@@ -73,7 +73,7 @@ mount -t ext4 -o loop /mnt/shares/samsung/rpifs.img /mnt/shares/rpifs&lt;/code&g
 &lt;pre&gt;&lt;code class=&quot;bash&quot;&gt;mkdir /tmp/raspbian
 mount -t ext4 -o loop,offset=$((122880*512)) 2012-12-16-wheezy-raspbian.img /tmp/raspbian/
 rsync -av /tmp/raspbian/ /mnt/shares/rpifs/&lt;/code&gt;&lt;/pre&gt;
-&lt;p&gt;This crazy &lt;code&gt;mount&lt;/code&gt; (or rather &lt;code&gt;losetup&lt;/code&gt;) trick allows you to mount a &lt;em&gt;part&lt;/em&gt; of a disk image - like one of the partitions inside - via a loop device. To make it work, you have to find out where the desired partition starts (byte offset from start of image file) and pass that to mount via the &lt;code&gt;offset&lt;/code&gt; option. You can find &lt;code&gt;fdisk&lt;/code&gt; to find the right number:
+&lt;p&gt;This crazy &lt;code&gt;mount&lt;/code&gt; (or rather &lt;code&gt;losetup&lt;/code&gt;) trick allows you to mount a &lt;em&gt;part&lt;/em&gt; of a disk image - like one of the partitions inside - via a loop device. To make it work, you have to find out where the desired partition starts (byte offset from start of image file) and pass that to mount via the &lt;code&gt;offset&lt;/code&gt; option. You can use &lt;code&gt;fdisk&lt;/code&gt; to find the right number:
 
 &lt;/p&gt;
 &lt;pre&gt;&lt;code class=&quot;bash&quot;&gt;[rb@pluto 2012-12-16-wheezy-raspbian]$ fdisk -l 2012-12-16-wheezy-raspbian.img 
