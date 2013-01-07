@@ -87,6 +87,9 @@ Disk identifier: 0x00017b69
                          Device Boot      Start         End      Blocks   Id  System
 2012-12-16-wheezy-raspbian.img1            8192      122879       57344    c  W95 FAT32 (LBA)
 2012-12-16-wheezy-raspbian.img2          122880     3788799     1832960   83  Linux&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;(For some reason, this &lt;code&gt;fdisk&lt;/code&gt; invocation doesn&apos;t provide the correct results on older distributions, like Ubuntu 10.04 Lucid Lynx. It does work on a recent Arch Linux, though. Perhaps a bug in &lt;code&gt;fdisk&lt;/code&gt;?)
+
+&lt;/p&gt;
 &lt;p&gt;As you can see, the FAT32 partition (&lt;code&gt;/boot&lt;/code&gt;) comes first, starting at sector #8192, then comes the ext4 fs (&lt;code&gt;/&lt;/code&gt;) at sector #122880. As each sector uses 512 bytes, we&apos;ll have to multiply the sector number by 512 to get the byte offset.
 
 &lt;/p&gt;
