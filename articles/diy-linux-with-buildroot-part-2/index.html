@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+  <!-- hi visitor! if you need my e-mail address, execute show_me_your_email_address() in your favorite web console. -->
+  <head>
+    <meta charset="utf-8">
+    <title>DIY Linux with Buildroot [2/2] - Raspberry Pie
+    </title>
+    <link rel="alternate" href="http://cellux.github.com/feed.xml" type="application/rss+xml" title="My personal adventures in the world of the Raspberry Pi">
+    <link rel="stylesheet" href="/css/normalize.css">
+    <link rel="stylesheet" href="/css/960.css">
+    <link rel="stylesheet" href="/css/fbg.css">
+    <link rel="stylesheet" href="/css/main.css">
+    <script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/jquery/1/jquery.js"></script>
+    <script type="text/javascript" src="/js/galleria-1.2.8.min.js"></script>
+    <script type="text/javascript" src="/js/main.js"></script>
+  </head>
+  <body>
+    <div class="container_12">
+      <header>
+        <div class="grid_4"><img src="/images/raspberry_184px.jpg" width="215px" height="184px"></div>
+        <div class="grid_7 suffix_1"><img src="/images/adventures_in_the_world_of_the_raspberry_pi.png" style="float: right; margin-top: 161px;"></div>
+        <div class="clear"></div>
+        <div class="grid_12">
+          <div><img id="head-sep" src="/images/sep.png"></div>
+          <div id="nav" style="float:right;"><a href="/articles/my-first-day-with-the-raspberry-pi/"><img src="/images/nav-first.png" style="left: 0px"></a><a href="/articles/diy-linux-with-buildroot-part-1/"><img src="/images/nav-prev.png" style="left: 25px"></a><a href="/archive.html"><img src="/images/nav-list.png" style="left: 50px"></a><a href="#"><img src="/images/nav-next.png" style="left: 75px"></a><a href="/articles/diy-linux-with-buildroot-part-2/"><img src="/images/nav-last.png" style="left: 100px"></a></div>
+        </div>
+        <div class="clear"></div>
+      </header>
+      <div id="content">
+        <article class="post">
+          <h4>DIY Linux with Buildroot [2/2]</h4>
+          <section class="content"><p>In the <a href="http://cellux.github.com/articles/diy-linux-with-buildroot-part-1/">first part</a> of this article, we built a minimal Linux system with Buildroot. In today&apos;s session, we&apos;ll automate the post-build fixups and extend Buildroot with two RPi-specific packages.
+
+</p>
+<h5>Automating post-build actions</h5>
+<p>This is easy: just create a script somewhere which contains the commands to execute after a successful build, then let Buildroot know about it by setting the <code>BR2_ROOTFS_POST_BUILD_SCRIPT</code> config variable (which can be found under <code>System configuration</code> / <code>Custom script to run before creating filesystem images</code> in kconfig).
+
+</p>
+<p>The location of this script can be specified relative to <code>$TOPDIR</code>, so it makes sense to store it somewhere in the Buildroot tree. My solution was to create a <code>board/rpi</code> directory for this purpose and symlink it to the actual content which is stored in a git repository:
+
+</p>
+<pre><code class="bash">cd <span class="variable">$HOME</span>/repos
+git <span class="keyword">clone</span> https:<span class="comment">//github.com/cellux/rpi-buildroot.git</span>
+cd <span class="variable">$HOME</span>/buildroot
+tar xvzf buildroot-<span class="number">2012.11</span>.<span class="number">1</span>.tar.gz
+cd buildroot-<span class="number">2012.11</span>.<span class="number">1</span>
+ln -s <span class="variable">$HOME</span>/repos/rpi-buildroot/board/rpi board/rpi</code></pre>
+<p>This way I can easily add all my personal customizations to a freshly unpacked Buildroot tree.
+
+</p>
+<p>The script (<code>board/rpi/post-build.sh</code>) could look like this:
+
+</p>
+<pre><code class="bash">TARGETDIR=$<span class="number">1</span>
+BR_ROOT=<span class="variable">$PWD</span>
+
+<span class="comment"># set root password to `passpass'</span>
+install -T -m <span class="number">0600</span> <span class="variable">$BR_ROOT</span>/system/skeleton/etc/shadow <span class="variable">$TARGETDIR</span>/etc/shadow
+sed -i -e <span class="string">'s#^root:[^:]*:#root:saWv8UefZU43.:#'</span> <span class="variable">$TARGETDIR</span>/etc/shadow
+
+<span class="comment"># create an empty /boot directory in target</span>
+install -d -m <span class="number">0755</span> <span class="variable">$TARGETDIR</span>/boot
+
+<span class="comment"># setup mount for /boot</span>
+install -T -m <span class="number">0644</span> <span class="variable">$BR_ROOT</span>/system/skeleton/etc/fstab <span class="variable">$TARGETDIR</span>/etc/fstab
+<span class="keyword">echo</span> <span class="string">'/dev/mmcblk0p1 /boot vfat defaults 0 0'</span> >> <span class="variable">$TARGETDIR</span>/etc/fstab</code></pre>
+<p>(don&apos;t forget to chmod the script file to 755)
+
+</p>
+<p>As you see, Buildroot runs the script from <code>$TOPDIR</code> and passes the location of the target file system as the first argument.
+
+</p>
+<p>A small change compared to the previous article is the hard-coding of the crypted password, this was done to avoid the dependency on Perl.
+
+</p>
+<p>The <code>/etc/shadow</code> and <code>/etc/fstab</code> files are copied from a Buildroot-provided skeleton filesystem and then updated with our stuff. If we left out the copy and ran <code>make</code> repeatedly, <code>$TARGETDIR/etc/fstab</code> would contain several entries for <code>/boot</code>.
+
+</p>
+<h5>Extending Buildroot with new packages</h5>
+<p>Buildroot stores its packages (or rather package definitions) in the <code>$TOPDIR/package</code> directory. For instance, the busybox package may be found under <code>$TOPDIR/package/busybox</code>.
+
+</p>
+<p>Packages may have sub-packages, sub-packages may have sub-sub-packages and so on, these are stored in an analogous directory structure under <code>package/&lt;main-package&gt;</code> (see <code>x11r7</code> for an example).
+
+</p>
+<p>Each package has a <code>Config.in</code> file which specifies what options the package has and defines how kconfig should display these in the configuration menu.
+
+</p>
+<p>When kconfig starts, it parses <code>$TOPDIR/Config.in</code>, which pulls in the <code>Config.in</code> files of the <code>toolchain</code>, <code>system</code>, <code>package</code>, <code>fs</code>, <code>boot</code> and <code>linux</code> directories. These recursively include their child <code>Config.in</code> files and this way a configuration tree is built. Kconfig presents this tree to the user who makes her selections. Upon exiting, all config settings are merged together into a <code>.config</code> file which is then saved to <code>$TOPDIR</code>.
+
+</p>
+<p>As an example, here is the <code>Config.in</code> file from the <code>tcpdump</code> package:
+
+</p>
+<pre><code>config BR2_PACKAGE_TCPDUMP
+    bool <span class="string">"tcpdump"</span>
+    select BR2_PACKAGE_LIBPCAP
+    help
+      A tool <span class="keyword">for</span> network monitoring <span class="keyword">and</span> data acquisition.
+
+      http:<span class="comment">//www.tcpdump.org/</span>
+
+config BR2_PACKAGE_TCPDUMP_SMB
+    bool <span class="string">"smb dump support"</span>
+    depends on BR2_PACKAGE_TCPDUMP
+    help
+      enable possibly-buggy SMB printer</code></pre>
+<p>Each <code>config</code> stanza defines one configuration variable. The first line of the stanza defines the type and label of the config entry. The <code>select</code> entry tells kconfig that selecting <code>tcpdump</code> would automatically enable the <code>libpcap</code> package as well, while <code>depends</code> declares that <code>smb dump support</code> can be selected only if <code>tcpdump</code> has been already selected (in practice this means that this entry won&apos;t be visible until <code>tcpdump</code> has been selected).
+
+</p>
+<p>All lines below the config stanzas must be indented with a single tab. Help lines must have an extra prefix of two extra spaces (after the tab).
+
+</p>
+<p>Upon executing <code>make</code>, Buildroot goes over the selected packages and for each one executes a package-specific makefile located at <code>package/&lt;package-name&gt;/&lt;package-name&gt;.mk</code>.
+
+</p>
+<p>Let&apos;s see how <code>tcpdump</code> gets built (<code>package/tcpdump/tcpdump.mk</code>):
+
+</p>
+<pre><code><span class="comment">#############################################################</span>
+<span class="comment">#</span>
+<span class="comment"># tcpdump</span>
+<span class="comment">#</span>
+<span class="comment">#############################################################</span>
+<span class="comment"># Copyright (C) 2001-2003 by Erik Andersen &lt;andersen@codepoet.org></span>
+<span class="comment"># Copyright (C) 2002 by Tim Riker &lt;Tim@Rikers.org></span>
+
+TCPDUMP_VERSION = <span class="number">4.3</span>.<span class="number">0</span>
+TCPDUMP_SITE = http:<span class="comment">//www.tcpdump.org/release</span>
+TCPDUMP_LICENSE = BSD-<span class="number">3</span>c
+TCPDUMP_LICENSE_FILES = LICENSE
+
+TCPDUMP_CONF_ENV = ac_cv_linux_vers=<span class="number">2</span> td_cv_buggygetaddrinfo=no
+TCPDUMP_CONF_OPT = --without-crypto \
+                $(<span class="keyword">if</span> $(BR2_PACKAGE_TCPDUMP_SMB),--enable-smb,--disable-smb)
+TCPDUMP_DEPENDENCIES = zlib libpcap
+
+<span class="comment"># make install installs an unneeded extra copy of the tcpdump binary</span>
+define TCPDUMP_REMOVE_DUPLICATED_BINARY
+    rm -f $(TARGET_DIR)/usr/sbin/tcpdump.$(TCPDUMP_VERSION)
+endef
+
+TCPDUMP_POST_INSTALL_TARGET_HOOKS += TCPDUMP_REMOVE_DUPLICATED_BINARY
+
+$(<span class="keyword">eval</span> $(autotools-package))</code></pre>
+<p>Every makefile in Buildroot works in the same way: first it sets up a set of make variables to configure the build (their names are prefixed with the uppercase name of the package, hyphens converted to underscores), then invokes one or several macros (in this case, <code>autotools-package</code>) which carry out the actual build process.
+
+</p>
+<p>The system provides three major mechanisms/macros for building packages:
+
+</p>
+<ol>
+<li><code>autotools-package</code> for autotools-based ones (<code>./configure &amp;&amp; make &amp;&amp; make install</code>)</li>
+<li><code>cmake-package</code> for <code>cmake</code> projects</li>
+<li><code>generic-package</code> for the rest</li>
+</ol>
+<p>A package gets built in several stages: first it&apos;s downloaded, then unpacked, patched, configured, built and finally installed (it can be also cleaned and uninstalled - if the package supports this).
+
+</p>
+<h6>Download</h6>
+<p>To download a package called <code>pkg</code>, Buildroot tries to fetch it from <code>$(PKG_SITE)/$(PKG)-$(PKG_VERSION).tar.gz</code> (it can also clone it from a version control system - SVN, Bazaar, Git, Mercurial are all supported -, <code>scp</code> it from somewhere or simply copy it from a directory on the local system). If we define a variable named <code>PKG_SOURCE</code>, then Buildroot will use that instead of <code>$(PKG)-$(PKG_VERSION).tar.gz</code>. The downloaded file will be stored in the download directory (<code>$(HOME)/buildroot/dl</code> in our case).
+
+</p>
+<h6>Unpack</h6>
+<p>The downloaded package gets unpacked into <code>output/build/$(PKG)-$(PKG_VERSION)</code>.
+
+</p>
+<h6>Patch</h6>
+<p>If there are any files called <code>$(PKG)-*.patch</code> in the <code>package/$(PKG)</code> directory, then these are all applied to the unpacked source in alphabetical order.
+
+</p>
+<h6>Configure</h6>
+<p>In the case of autotools-based packages, this step invokes the <code>./configure</code> script with parameters given by <code>$(PKG)_CONF_OPT</code> and an environment extended with the variables in <code>$(PKG)_CONF_ENV</code>.
+
+</p>
+<p>In the case of generic packages, we must define a variable called <code>$(PKG)_CONFIGURE_CMDS</code> and Buildroot will invoke that:
+
+</p>
+<pre><code>define PKG_CONFIGURE_CMDS
+       <span class="comment"># do what is required here to configure package `pkg'</span>
+endef</code></pre>
+<h6>Build</h6>
+<p>In case of autotools-based packages, this step executes <code>make</code>.
+
+</p>
+<p>For generic packages, we must define the build steps in <code>$(PKG)_BUILD_CMDS</code>.
+
+</p>
+<h6>Install</h6>
+<p>Buildroot knows about four types of installation:
+
+</p>
+<ol>
+<li>Install to the host directory (<code>output/host</code>)</li>
+<li>Install to the staging directory (<code>output/staging</code>)</li>
+<li>Install to the images directory (<code>output/images</code>)</li>
+<li>Install to the target directory (<code>output/target</code>)</li>
+</ol>
+<p>The <code>host</code> directory is used for packages which must be built for the host machine (host gcc, m4, autotools, cmake, etc.)
+
+</p>
+<p>The <code>staging</code> directory is used to install dependencies of other packages. For instance, <code>tcpdump</code> depends on <code>zlib</code> and <code>libpcap</code>, so these must be built and installed (as ARM binaries) to <code>output/staging</code> before <code>tcpdump</code> can get built.
+
+</p>
+<p>The <code>images</code> directory is the target for the Linux kernel and the final root fs. Not many packages use this kind of install.
+
+</p>
+<p>The <code>target</code> directory serves as a base for the final root fs: each package which wants to have files in the root fs must install something here.
+
+</p>
+<p>For generic packages, the corresponding make variables prescribing the install steps are <code>$(PKG)_INSTALL_CMDS</code>, <code>$(PKG)_INSTALL_STAGING_CMDS</code>, <code>$(PKG)_INSTALL_IMAGES_CMDS</code> and <code>$(PKG)_INSTALL_TARGET_CMDS</code>, respectively.
+
+</p>
+<h5>Creating a package for RPi firmware</h5>
+<p>In the previous article, we copied the firmware files (<code>bootcode.bin</code>, <code>start.elf</code> and <code>fixup.dat</code>), the Linux kernel and <code>cmdline.txt</code> to the <code>/boot</code> partition of the SD card by hand.
+
+</p>
+<p>It would be nice to modify Buildroot in such a way that when the build process is over, we get a <code>bootfs.tar.gz</code> file under <code>output/images</code> which we can extract to the <code>/boot</code> partition.
+
+</p>
+<p>We&apos;ll create a new package under <code>package/rpi/rpi-firmware</code> to take care of this.
+
+</p>
+<p>The new package&apos;s <code>Config.in</code> file looks like this (watch out for tab characters if you copy/paste):
+
+</p>
+<pre><code>config BR2_PACKAGE_RPI_FIRMWARE
+    bool "Raspberry Pi GPU firmware + boot files"
+    help
+      If you select this, you'll get a bootfs.tar.gz in output/images
+      with a filesystem ready to be written to the first partition
+      of the Raspberry Pi SD card.
+
+    https://github.com/raspberrypi/firmware
+
+config BR2_PACKAGE_RPI_FIRMWARE_CMDLINE
+    string "Linux kernel command line"
+    default "dwc_otg.lpm_enable=0 console=tty1 elevator=deadline rootwait ip=dhcp root=/dev/mmcblk0p2 rootfstype=ext4"
+    help
+      String to be written to /boot/cmdline.txt</code></pre>
+<p>The corresponding makefile:
+
+</p>
+<pre><code><span class="comment">#############################################################</span>
+<span class="comment">#</span>
+<span class="comment"># rpi-firmware</span>
+<span class="comment">#</span>
+<span class="comment">#############################################################</span>
+RPI_FIRMWARE_VERSION = ffbb918fd46f1b0b687a474857b370f24f71989d
+RPI_FIRMWARE_SITE = https:<span class="comment">//github.com/raspberrypi/firmware/archive</span>
+RPI_FIRMWARE_SOURCE = $(RPI_FIRMWARE_VERSION).tar.gz
+RPI_FIRMWARE_INSTALL_STAGING = YES
+
+define RPI_FIRMWARE_INSTALL_STAGING_CMDS
+    $(INSTALL) -d -m <span class="number">0755</span> $(STAGING_DIR)/boot || /bin/<span class="keyword">true</span>
+    $(INSTALL) -m <span class="number">0644</span> $(@D)/boot/bootcode.bin $(STAGING_DIR)/boot
+    $(INSTALL) -m <span class="number">0644</span> $(@D)/boot/fixup.dat $(STAGING_DIR)/boot
+    $(INSTALL) -m <span class="number">0644</span> $(@D)/boot/start.elf $(STAGING_DIR)/boot
+    <span class="keyword">echo</span> <span class="string">"$(call qstrip,$(BR2_PACKAGE_RPI_FIRMWARE_CMDLINE))"</span> > $(STAGING_DIR)/boot/cmdline.txt
+endef
+
+$(<span class="keyword">eval</span> $(generic-package))</code></pre>
+<p><code>$(@D)</code> is the build directory of the package (<code>output/build/rpi-firmware-ffbb918fd46f1b0b687a474857b370f24f71989d</code> in this case).
+
+</p>
+<p>We take advantage of the fact that a given commit on GitHub can be downloaded in .tar.gz format from the <code>https://github.com/&lt;user&gt;/&lt;repo&gt;/archive/&lt;sha1&gt;.tar.gz</code> URL.
+
+</p>
+<p><code>RPI_FIRMWARE_INSTALL_STAGING = YES</code> declares that this package wants to install something to <code>output/staging</code> so the build process will execute the commands in <code>RPI_FIRMWARE_INSTALL_STAGING_CMDS</code>.
+
+</p>
+<p>The reason for assembling the boot directory under <code>staging</code> is that we don&apos;t want these files to be present on <code>target</code> (there we need an empty directory which will serve as a mount point).
+
+</p>
+<p>To activate this package, we need to pull in its <code>Config.in</code> from one of the main <code>Config.in</code> files.
+
+</p>
+<p>As we&apos;ll most likely create several RPi-specific packages, I created the following <code>Config.in</code> in the <code>package/rpi</code> directory:
+
+</p>
+<pre><code>menu "Raspberry Pi"
+source "package/rpi/rpi-firmware/Config.in"
+endmenu</code></pre>
+<p>and sourced it at the end of <code>package/Config.in</code> (before the last <code>endmenu</code>):
+
+</p>
+<pre><code>source "package/rpi/Config.in"</code></pre>
+<p>The result: a new menu entry - <code>Raspberry Pi</code> - shows up under <code>Package Selection for the target</code>, and when we enter it, we see the options defined by <code>package/rpi/rpi-firmware/Config.in</code>.
+
+</p>
+<p>The corresponding makefile (<code>package/rpi/rpi.mk</code>):
+
+</p>
+<pre><code>include package/rpi/*/*.mk</code></pre>
+<p>This just pulls in all the package-specific makefiles it finds under the <code>package/rpi/*</code> directories.
+
+</p>
+<p>The last thing we must do is to package up the contents of the staging <code>/boot</code> folder to <code>output/images/bootfs.tar.gz</code>. Let&apos;s do this with an images install:
+
+</p>
+<pre><code>RPI_FIRMWARE_INSTALL_IMAGES = YES
+
+define RPI_FIRMWARE_INSTALL_IMAGES_CMDS
+    $(INSTALL) -m 0644 $(BINARIES_DIR)/zImage $(STAGING_DIR)/boot/kernel.img
+    tar -C $(STAGING_DIR)/boot -cvzf $(BINARIES_DIR)/bootfs.tar.gz .
+endef</code></pre>
+<p>First we copy the kernel zImage to <code>/boot</code> on staging (<code>BINARIES_DIR</code> is specified by the top-level Makefile), then we create the tar.gz.
+
+</p>
+<p>As we need the kernel image before we can pack up <code>bootfs.tar.gz</code>, we have to declare a dependency on the <code>linux</code> package:
+
+</p>
+<pre><code>RPI_FIRMWARE_DEPENDENCIES = linux</code></pre>
+<p>That&apos;s all.
+
+</p>
+<h5>Creating a package for RPi userland</h5>
+<p>The RPi userland consists of the following libraries:
+
+</p>
+<ul>
+<li>libbcm_host.so</li>
+<li>libEGL.so</li>
+<li>libGLESv2.so</li>
+<li>libmmal.so</li>
+<li>libmmal_vc_client.so</li>
+<li>libopenmaxil.so</li>
+<li>libOpenVG.so</li>
+<li>libvchiq_arm.so</li>
+<li>libvcos.so</li>
+<li>libWFC.so</li>
+</ul>
+<p>These will become important when we want to experiment with the facilities provided by the Broadcom VideoCore GPU from our programs.
+
+</p>
+<p>Fortunately, the complete source code of these libraries is <a href="https://github.com/raspberrypi/userland">available</a> on GitHub and the package uses <code>cmake</code> as its build system which means it&apos;s a snap to integrate it into Buildroot.
+
+</p>
+<p>Here are all the files required for our new package <code>rpi-userland</code>:
+
+</p>
+<p><code>package/rpi/rpi-userland/Config.in</code>:
+
+</p>
+<pre><code>config BR2_PACKAGE_RPI_USERLAND
+    bool <span class="string">"Raspberry Pi userland"</span>
+    help
+      Raspberry Pi Userland
+
+      https:<span class="comment">//github.com/raspberrypi/userland/</span></code></pre>
+<p>(Don&apos;t forget to reference it from <code>package/rpi/Config.in</code>.)
+
+</p>
+<p><code>package/rpi/rpi-userland/rpi-userland.mk</code>:
+
+</p>
+<pre><code>#############################################################
+#
+# rpi-userland
+#
+#############################################################
+RPI_USERLAND_VERSION = 9852ce28826889e50c4d6786b942f51bccccac54
+RPI_USERLAND_SITE = https://github.com/raspberrypi/userland/archive
+RPI_USERLAND_SOURCE = 9852ce28826889e50c4d6786b942f51bccccac54.tar.gz
+RPI_USERLAND_INSTALL_TARGET = YES
+
+define RPI_USERLAND_INSTALL_TARGET_CMDS
+        $(INSTALL) -m 0644 $(@D)/build/lib/*.so $(TARGET_DIR)/usr/lib
+        $(INSTALL) -m 0755 $(@D)/build/bin/* $(TARGET_DIR)/usr/bin
+endef
+
+$(eval $(cmake-package))</code></pre>
+<p>First I used <code>master</code> as the value of <code>RPI_USERLAND_VERSION</code>, but this led to name clashes between packages in the download directory (several packages wanted to download their archive to <code>master.tar.gz</code>), so I switched to SHA-1 hashes instead.
+
+</p>
+<p>One last thing before we can build this: the <code>interface/vcos/glibc/vcos_backtrace.c</code> file must be patched because it refers to a C function (<code>backtrace</code>) which is not available in µClibc:
+
+</p>
+<p><code>package/rpi/rpi-userland/rpi-userland-disable-backtrace.patch</code>:
+
+</p>
+<pre><code>--- userland.old/<span class="keyword">interface</span>/vcos/glibc/vcos_backtrace.c  <span class="number">2013</span>-<span class="number">01</span>-<span class="number">06</span> <span class="number">21</span>:<span class="number">19</span>:<span class="number">45.642055469</span> +<span class="number">0100</span>
++++ userland.<span class="keyword">new</span>/<span class="keyword">interface</span>/vcos/glibc/vcos_backtrace.c  <span class="number">2013</span>-<span class="number">01</span>-<span class="number">06</span> <span class="number">21</span>:<span class="number">17</span>:<span class="number">55.592626490</span> +<span class="number">0100</span>
+@@ -<span class="number">26</span>,<span class="number">16</span> +<span class="number">26</span>,<span class="number">19</span> @@
+ */
+
+ <span class="comment">#include &lt;interface/vcos/vcos.h></span>
+-<span class="comment">#ifdef __linux__</span>
++<span class="comment">#ifdef __GLIBC__</span>
++<span class="comment">#ifndef __UCLIBC__</span>
+ <span class="comment">#include &lt;execinfo.h></span>
+ <span class="comment">#endif</span>
++<span class="comment">#endif</span>
+ <span class="comment">#include &lt;stdio.h></span>
+ <span class="comment">#include &lt;stdlib.h></span>
+ <span class="comment">#include &lt;sys/types.h></span>
+
+ void vcos_backtrace_self(void)
+ {
+-<span class="comment">#ifdef __linux__</span>
++<span class="comment">#ifdef __GLIBC__</span>
++<span class="comment">#ifndef __UCLIBC__</span>
+    void *stack[<span class="number">64</span>];
+    int depth = backtrace(stack, sizeof(stack)/sizeof(stack[<span class="number">0</span>]));
+    char **names = backtrace_symbols(stack, depth);
+@@ -<span class="number">49</span>,<span class="number">5</span> +<span class="number">52</span>,<span class="number">6</span> @@
+       free(names);
+    }
+ <span class="comment">#endif</span>
++<span class="comment">#endif</span>
+ }</code></pre>
+<p>(If you don&apos;t want to fiddle with copy/pasting these files, just fetch them from my Git repository at <a href="https://github.com/cellux/rpi-buildroot">https://github.com/cellux/rpi-buildroot</a>)
+
+</p>
+<p>Now execute <code>make menuconfig</code>, enable the new package(s), <code>make</code> the whole thing and unpack the resulting <code>bootfs.tar.gz</code> and <code>rootfs.tar.gz</code> (as root) to the correct places.
+
+</p>
+<p>Happy hacking!
+</p>
+</section>
+        </article>
+      </div>
+      <footer>
+        <div class="inner">
+          <p>&nbsp;</p>
+        </div>
+      </footer>
+    </div>
+  </body>
+</html>

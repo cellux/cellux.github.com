@@ -5,9 +5,734 @@
     <atom:link href="http://cellux.github.com/feed.xml" rel="self" type="application/rss+xml"></atom:link>
     <link>http://cellux.github.com</link>
     <description>My personal adventures in the world of the Raspberry Pi</description>
-    <pubDate>Fri, 04 Jan 2013 22:58:00 +0100</pubDate>
+    <pubDate>Fri, 11 Jan 2013 08:27:00 +0100</pubDate>
     <generator>The mighty Wintersmith</generator>
     <language>en</language>
+    <item>
+      <title>DIY Linux with Buildroot [2/2]</title>
+      <link>http://cellux.github.com/articles/diy-linux-with-buildroot-part-2/</link>
+      <pubDate>Fri, 11 Jan 2013 08:27:00 +0100</pubDate>
+      <guid isPermaLink="true">http://cellux.github.com/articles/diy-linux-with-buildroot-part-2/</guid>
+      <author></author>
+      <description>&lt;p&gt;In the &lt;a href=&quot;http://cellux.github.com/articles/diy-linux-with-buildroot-part-1/&quot;&gt;first part&lt;/a&gt; of this article, we built a minimal Linux system with Buildroot. In today&apos;s session, we&apos;ll automate the post-build fixups and extend Buildroot with two RPi-specific packages.
+
+&lt;/p&gt;
+&lt;h5&gt;Automating post-build actions&lt;/h5&gt;
+&lt;p&gt;This is easy: just create a script somewhere which contains the commands to execute after a successful build, then let Buildroot know about it by setting the &lt;code&gt;BR2_ROOTFS_POST_BUILD_SCRIPT&lt;/code&gt; config variable (which can be found under &lt;code&gt;System configuration&lt;/code&gt; / &lt;code&gt;Custom script to run before creating filesystem images&lt;/code&gt; in kconfig).
+
+&lt;/p&gt;
+&lt;p&gt;The location of this script can be specified relative to &lt;code&gt;$TOPDIR&lt;/code&gt;, so it makes sense to store it somewhere in the Buildroot tree. My solution was to create a &lt;code&gt;board/rpi&lt;/code&gt; directory for this purpose and symlink it to the actual content which is stored in a git repository:
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;bash&quot;&gt;cd &lt;span class=&quot;variable&quot;&gt;$HOME&lt;/span&gt;/repos
+git &lt;span class=&quot;keyword&quot;&gt;clone&lt;/span&gt; https:&lt;span class=&quot;comment&quot;&gt;//github.com/cellux/rpi-buildroot.git&lt;/span&gt;
+cd &lt;span class=&quot;variable&quot;&gt;$HOME&lt;/span&gt;/buildroot
+tar xvzf buildroot-&lt;span class=&quot;number&quot;&gt;2012.11&lt;/span&gt;.&lt;span class=&quot;number&quot;&gt;1&lt;/span&gt;.tar.gz
+cd buildroot-&lt;span class=&quot;number&quot;&gt;2012.11&lt;/span&gt;.&lt;span class=&quot;number&quot;&gt;1&lt;/span&gt;
+ln -s &lt;span class=&quot;variable&quot;&gt;$HOME&lt;/span&gt;/repos/rpi-buildroot/board/rpi board/rpi&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;This way I can easily add all my personal customizations to a freshly unpacked Buildroot tree.
+
+&lt;/p&gt;
+&lt;p&gt;The script (&lt;code&gt;board/rpi/post-build.sh&lt;/code&gt;) could look like this:
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;bash&quot;&gt;TARGETDIR=$&lt;span class=&quot;number&quot;&gt;1&lt;/span&gt;
+BR_ROOT=&lt;span class=&quot;variable&quot;&gt;$PWD&lt;/span&gt;
+
+&lt;span class=&quot;comment&quot;&gt;# set root password to `passpass'&lt;/span&gt;
+install -T -m &lt;span class=&quot;number&quot;&gt;0600&lt;/span&gt; &lt;span class=&quot;variable&quot;&gt;$BR_ROOT&lt;/span&gt;/system/skeleton/etc/shadow &lt;span class=&quot;variable&quot;&gt;$TARGETDIR&lt;/span&gt;/etc/shadow
+sed -i -e &lt;span class=&quot;string&quot;&gt;'s#^root:[^:]*:#root:saWv8UefZU43.:#'&lt;/span&gt; &lt;span class=&quot;variable&quot;&gt;$TARGETDIR&lt;/span&gt;/etc/shadow
+
+&lt;span class=&quot;comment&quot;&gt;# create an empty /boot directory in target&lt;/span&gt;
+install -d -m &lt;span class=&quot;number&quot;&gt;0755&lt;/span&gt; &lt;span class=&quot;variable&quot;&gt;$TARGETDIR&lt;/span&gt;/boot
+
+&lt;span class=&quot;comment&quot;&gt;# setup mount for /boot&lt;/span&gt;
+install -T -m &lt;span class=&quot;number&quot;&gt;0644&lt;/span&gt; &lt;span class=&quot;variable&quot;&gt;$BR_ROOT&lt;/span&gt;/system/skeleton/etc/fstab &lt;span class=&quot;variable&quot;&gt;$TARGETDIR&lt;/span&gt;/etc/fstab
+&lt;span class=&quot;keyword&quot;&gt;echo&lt;/span&gt; &lt;span class=&quot;string&quot;&gt;'/dev/mmcblk0p1 /boot vfat defaults 0 0'&lt;/span&gt; &gt;&gt; &lt;span class=&quot;variable&quot;&gt;$TARGETDIR&lt;/span&gt;/etc/fstab&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;(don&apos;t forget to chmod the script file to 755)
+
+&lt;/p&gt;
+&lt;p&gt;As you see, Buildroot runs the script from &lt;code&gt;$TOPDIR&lt;/code&gt; and passes the location of the target file system as the first argument.
+
+&lt;/p&gt;
+&lt;p&gt;A small change compared to the previous article is the hard-coding of the crypted password, this was done to avoid the dependency on Perl.
+
+&lt;/p&gt;
+&lt;p&gt;The &lt;code&gt;/etc/shadow&lt;/code&gt; and &lt;code&gt;/etc/fstab&lt;/code&gt; files are copied from a Buildroot-provided skeleton filesystem and then updated with our stuff. If we left out the copy and ran &lt;code&gt;make&lt;/code&gt; repeatedly, &lt;code&gt;$TARGETDIR/etc/fstab&lt;/code&gt; would contain several entries for &lt;code&gt;/boot&lt;/code&gt;.
+
+&lt;/p&gt;
+&lt;h5&gt;Extending Buildroot with new packages&lt;/h5&gt;
+&lt;p&gt;Buildroot stores its packages (or rather package definitions) in the &lt;code&gt;$TOPDIR/package&lt;/code&gt; directory. For instance, the busybox package may be found under &lt;code&gt;$TOPDIR/package/busybox&lt;/code&gt;.
+
+&lt;/p&gt;
+&lt;p&gt;Packages may have sub-packages, sub-packages may have sub-sub-packages and so on, these are stored in an analogous directory structure under &lt;code&gt;package/&lt;main-package&gt;&lt;/code&gt; (see &lt;code&gt;x11r7&lt;/code&gt; for an example).
+
+&lt;/p&gt;
+&lt;p&gt;Each package has a &lt;code&gt;Config.in&lt;/code&gt; file which specifies what options the package has and defines how kconfig should display these in the configuration menu.
+
+&lt;/p&gt;
+&lt;p&gt;When kconfig starts, it parses &lt;code&gt;$TOPDIR/Config.in&lt;/code&gt;, which pulls in the &lt;code&gt;Config.in&lt;/code&gt; files of the &lt;code&gt;toolchain&lt;/code&gt;, &lt;code&gt;system&lt;/code&gt;, &lt;code&gt;package&lt;/code&gt;, &lt;code&gt;fs&lt;/code&gt;, &lt;code&gt;boot&lt;/code&gt; and &lt;code&gt;linux&lt;/code&gt; directories. These recursively include their child &lt;code&gt;Config.in&lt;/code&gt; files and this way a configuration tree is built. Kconfig presents this tree to the user who makes her selections. Upon exiting, all config settings are merged together into a &lt;code&gt;.config&lt;/code&gt; file which is then saved to &lt;code&gt;$TOPDIR&lt;/code&gt;.
+
+&lt;/p&gt;
+&lt;p&gt;As an example, here is the &lt;code&gt;Config.in&lt;/code&gt; file from the &lt;code&gt;tcpdump&lt;/code&gt; package:
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;config BR2_PACKAGE_TCPDUMP
+    bool &lt;span class=&quot;string&quot;&gt;&quot;tcpdump&quot;&lt;/span&gt;
+    select BR2_PACKAGE_LIBPCAP
+    help
+      A tool &lt;span class=&quot;keyword&quot;&gt;for&lt;/span&gt; network monitoring &lt;span class=&quot;keyword&quot;&gt;and&lt;/span&gt; data acquisition.
+
+      http:&lt;span class=&quot;comment&quot;&gt;//www.tcpdump.org/&lt;/span&gt;
+
+config BR2_PACKAGE_TCPDUMP_SMB
+    bool &lt;span class=&quot;string&quot;&gt;&quot;smb dump support&quot;&lt;/span&gt;
+    depends on BR2_PACKAGE_TCPDUMP
+    help
+      enable possibly-buggy SMB printer&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Each &lt;code&gt;config&lt;/code&gt; stanza defines one configuration variable. The first line of the stanza defines the type and label of the config entry. The &lt;code&gt;select&lt;/code&gt; entry tells kconfig that selecting &lt;code&gt;tcpdump&lt;/code&gt; would automatically enable the &lt;code&gt;libpcap&lt;/code&gt; package as well, while &lt;code&gt;depends&lt;/code&gt; declares that &lt;code&gt;smb dump support&lt;/code&gt; can be selected only if &lt;code&gt;tcpdump&lt;/code&gt; has been already selected (in practice this means that this entry won&apos;t be visible until &lt;code&gt;tcpdump&lt;/code&gt; has been selected).
+
+&lt;/p&gt;
+&lt;p&gt;All lines below the config stanzas must be indented with a single tab. Help lines must have an extra prefix of two extra spaces (after the tab).
+
+&lt;/p&gt;
+&lt;p&gt;Upon executing &lt;code&gt;make&lt;/code&gt;, Buildroot goes over the selected packages and for each one executes a package-specific makefile located at &lt;code&gt;package/&lt;package-name&gt;/&lt;package-name&gt;.mk&lt;/code&gt;.
+
+&lt;/p&gt;
+&lt;p&gt;Let&apos;s see how &lt;code&gt;tcpdump&lt;/code&gt; gets built (&lt;code&gt;package/tcpdump/tcpdump.mk&lt;/code&gt;):
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;&lt;span class=&quot;comment&quot;&gt;#############################################################&lt;/span&gt;
+&lt;span class=&quot;comment&quot;&gt;#&lt;/span&gt;
+&lt;span class=&quot;comment&quot;&gt;# tcpdump&lt;/span&gt;
+&lt;span class=&quot;comment&quot;&gt;#&lt;/span&gt;
+&lt;span class=&quot;comment&quot;&gt;#############################################################&lt;/span&gt;
+&lt;span class=&quot;comment&quot;&gt;# Copyright (C) 2001-2003 by Erik Andersen &lt;andersen@codepoet.org&gt;&lt;/span&gt;
+&lt;span class=&quot;comment&quot;&gt;# Copyright (C) 2002 by Tim Riker &lt;Tim@Rikers.org&gt;&lt;/span&gt;
+
+TCPDUMP_VERSION = &lt;span class=&quot;number&quot;&gt;4.3&lt;/span&gt;.&lt;span class=&quot;number&quot;&gt;0&lt;/span&gt;
+TCPDUMP_SITE = http:&lt;span class=&quot;comment&quot;&gt;//www.tcpdump.org/release&lt;/span&gt;
+TCPDUMP_LICENSE = BSD-&lt;span class=&quot;number&quot;&gt;3&lt;/span&gt;c
+TCPDUMP_LICENSE_FILES = LICENSE
+
+TCPDUMP_CONF_ENV = ac_cv_linux_vers=&lt;span class=&quot;number&quot;&gt;2&lt;/span&gt; td_cv_buggygetaddrinfo=no
+TCPDUMP_CONF_OPT = --without-crypto \
+                $(&lt;span class=&quot;keyword&quot;&gt;if&lt;/span&gt; $(BR2_PACKAGE_TCPDUMP_SMB),--enable-smb,--disable-smb)
+TCPDUMP_DEPENDENCIES = zlib libpcap
+
+&lt;span class=&quot;comment&quot;&gt;# make install installs an unneeded extra copy of the tcpdump binary&lt;/span&gt;
+define TCPDUMP_REMOVE_DUPLICATED_BINARY
+    rm -f $(TARGET_DIR)/usr/sbin/tcpdump.$(TCPDUMP_VERSION)
+endef
+
+TCPDUMP_POST_INSTALL_TARGET_HOOKS += TCPDUMP_REMOVE_DUPLICATED_BINARY
+
+$(&lt;span class=&quot;keyword&quot;&gt;eval&lt;/span&gt; $(autotools-package))&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Every makefile in Buildroot works in the same way: first it sets up a set of make variables to configure the build (their names are prefixed with the uppercase name of the package, hyphens converted to underscores), then invokes one or several macros (in this case, &lt;code&gt;autotools-package&lt;/code&gt;) which carry out the actual build process.
+
+&lt;/p&gt;
+&lt;p&gt;The system provides three major mechanisms/macros for building packages:
+
+&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;&lt;code&gt;autotools-package&lt;/code&gt; for autotools-based ones (&lt;code&gt;./configure &amp;&amp; make &amp;&amp; make install&lt;/code&gt;)&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;cmake-package&lt;/code&gt; for &lt;code&gt;cmake&lt;/code&gt; projects&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;generic-package&lt;/code&gt; for the rest&lt;/li&gt;
+&lt;/ol&gt;
+&lt;p&gt;A package gets built in several stages: first it&apos;s downloaded, then unpacked, patched, configured, built and finally installed (it can be also cleaned and uninstalled - if the package supports this).
+
+&lt;/p&gt;
+&lt;h6&gt;Download&lt;/h6&gt;
+&lt;p&gt;To download a package called &lt;code&gt;pkg&lt;/code&gt;, Buildroot tries to fetch it from &lt;code&gt;$(PKG_SITE)/$(PKG)-$(PKG_VERSION).tar.gz&lt;/code&gt; (it can also clone it from a version control system - SVN, Bazaar, Git, Mercurial are all supported -, &lt;code&gt;scp&lt;/code&gt; it from somewhere or simply copy it from a directory on the local system). If we define a variable named &lt;code&gt;PKG_SOURCE&lt;/code&gt;, then Buildroot will use that instead of &lt;code&gt;$(PKG)-$(PKG_VERSION).tar.gz&lt;/code&gt;. The downloaded file will be stored in the download directory (&lt;code&gt;$(HOME)/buildroot/dl&lt;/code&gt; in our case).
+
+&lt;/p&gt;
+&lt;h6&gt;Unpack&lt;/h6&gt;
+&lt;p&gt;The downloaded package gets unpacked into &lt;code&gt;output/build/$(PKG)-$(PKG_VERSION)&lt;/code&gt;.
+
+&lt;/p&gt;
+&lt;h6&gt;Patch&lt;/h6&gt;
+&lt;p&gt;If there are any files called &lt;code&gt;$(PKG)-*.patch&lt;/code&gt; in the &lt;code&gt;package/$(PKG)&lt;/code&gt; directory, then these are all applied to the unpacked source in alphabetical order.
+
+&lt;/p&gt;
+&lt;h6&gt;Configure&lt;/h6&gt;
+&lt;p&gt;In the case of autotools-based packages, this step invokes the &lt;code&gt;./configure&lt;/code&gt; script with parameters given by &lt;code&gt;$(PKG)_CONF_OPT&lt;/code&gt; and an environment extended with the variables in &lt;code&gt;$(PKG)_CONF_ENV&lt;/code&gt;.
+
+&lt;/p&gt;
+&lt;p&gt;In the case of generic packages, we must define a variable called &lt;code&gt;$(PKG)_CONFIGURE_CMDS&lt;/code&gt; and Buildroot will invoke that:
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;define PKG_CONFIGURE_CMDS
+       &lt;span class=&quot;comment&quot;&gt;# do what is required here to configure package `pkg'&lt;/span&gt;
+endef&lt;/code&gt;&lt;/pre&gt;
+&lt;h6&gt;Build&lt;/h6&gt;
+&lt;p&gt;In case of autotools-based packages, this step executes &lt;code&gt;make&lt;/code&gt;.
+
+&lt;/p&gt;
+&lt;p&gt;For generic packages, we must define the build steps in &lt;code&gt;$(PKG)_BUILD_CMDS&lt;/code&gt;.
+
+&lt;/p&gt;
+&lt;h6&gt;Install&lt;/h6&gt;
+&lt;p&gt;Buildroot knows about four types of installation:
+
+&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;Install to the host directory (&lt;code&gt;output/host&lt;/code&gt;)&lt;/li&gt;
+&lt;li&gt;Install to the staging directory (&lt;code&gt;output/staging&lt;/code&gt;)&lt;/li&gt;
+&lt;li&gt;Install to the images directory (&lt;code&gt;output/images&lt;/code&gt;)&lt;/li&gt;
+&lt;li&gt;Install to the target directory (&lt;code&gt;output/target&lt;/code&gt;)&lt;/li&gt;
+&lt;/ol&gt;
+&lt;p&gt;The &lt;code&gt;host&lt;/code&gt; directory is used for packages which must be built for the host machine (host gcc, m4, autotools, cmake, etc.)
+
+&lt;/p&gt;
+&lt;p&gt;The &lt;code&gt;staging&lt;/code&gt; directory is used to install dependencies of other packages. For instance, &lt;code&gt;tcpdump&lt;/code&gt; depends on &lt;code&gt;zlib&lt;/code&gt; and &lt;code&gt;libpcap&lt;/code&gt;, so these must be built and installed (as ARM binaries) to &lt;code&gt;output/staging&lt;/code&gt; before &lt;code&gt;tcpdump&lt;/code&gt; can get built.
+
+&lt;/p&gt;
+&lt;p&gt;The &lt;code&gt;images&lt;/code&gt; directory is the target for the Linux kernel and the final root fs. Not many packages use this kind of install.
+
+&lt;/p&gt;
+&lt;p&gt;The &lt;code&gt;target&lt;/code&gt; directory serves as a base for the final root fs: each package which wants to have files in the root fs must install something here.
+
+&lt;/p&gt;
+&lt;p&gt;For generic packages, the corresponding make variables prescribing the install steps are &lt;code&gt;$(PKG)_INSTALL_CMDS&lt;/code&gt;, &lt;code&gt;$(PKG)_INSTALL_STAGING_CMDS&lt;/code&gt;, &lt;code&gt;$(PKG)_INSTALL_IMAGES_CMDS&lt;/code&gt; and &lt;code&gt;$(PKG)_INSTALL_TARGET_CMDS&lt;/code&gt;, respectively.
+
+&lt;/p&gt;
+&lt;h5&gt;Creating a package for RPi firmware&lt;/h5&gt;
+&lt;p&gt;In the previous article, we copied the firmware files (&lt;code&gt;bootcode.bin&lt;/code&gt;, &lt;code&gt;start.elf&lt;/code&gt; and &lt;code&gt;fixup.dat&lt;/code&gt;), the Linux kernel and &lt;code&gt;cmdline.txt&lt;/code&gt; to the &lt;code&gt;/boot&lt;/code&gt; partition of the SD card by hand.
+
+&lt;/p&gt;
+&lt;p&gt;It would be nice to modify Buildroot in such a way that when the build process is over, we get a &lt;code&gt;bootfs.tar.gz&lt;/code&gt; file under &lt;code&gt;output/images&lt;/code&gt; which we can extract to the &lt;code&gt;/boot&lt;/code&gt; partition.
+
+&lt;/p&gt;
+&lt;p&gt;We&apos;ll create a new package under &lt;code&gt;package/rpi/rpi-firmware&lt;/code&gt; to take care of this.
+
+&lt;/p&gt;
+&lt;p&gt;The new package&apos;s &lt;code&gt;Config.in&lt;/code&gt; file looks like this (watch out for tab characters if you copy/paste):
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;config BR2_PACKAGE_RPI_FIRMWARE
+    bool &quot;Raspberry Pi GPU firmware + boot files&quot;
+    help
+      If you select this, you'll get a bootfs.tar.gz in output/images
+      with a filesystem ready to be written to the first partition
+      of the Raspberry Pi SD card.
+
+    https://github.com/raspberrypi/firmware
+
+config BR2_PACKAGE_RPI_FIRMWARE_CMDLINE
+    string &quot;Linux kernel command line&quot;
+    default &quot;dwc_otg.lpm_enable=0 console=tty1 elevator=deadline rootwait ip=dhcp root=/dev/mmcblk0p2 rootfstype=ext4&quot;
+    help
+      String to be written to /boot/cmdline.txt&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;The corresponding makefile:
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;&lt;span class=&quot;comment&quot;&gt;#############################################################&lt;/span&gt;
+&lt;span class=&quot;comment&quot;&gt;#&lt;/span&gt;
+&lt;span class=&quot;comment&quot;&gt;# rpi-firmware&lt;/span&gt;
+&lt;span class=&quot;comment&quot;&gt;#&lt;/span&gt;
+&lt;span class=&quot;comment&quot;&gt;#############################################################&lt;/span&gt;
+RPI_FIRMWARE_VERSION = ffbb918fd46f1b0b687a474857b370f24f71989d
+RPI_FIRMWARE_SITE = https:&lt;span class=&quot;comment&quot;&gt;//github.com/raspberrypi/firmware/archive&lt;/span&gt;
+RPI_FIRMWARE_SOURCE = $(RPI_FIRMWARE_VERSION).tar.gz
+RPI_FIRMWARE_INSTALL_STAGING = YES
+
+define RPI_FIRMWARE_INSTALL_STAGING_CMDS
+    $(INSTALL) -d -m &lt;span class=&quot;number&quot;&gt;0755&lt;/span&gt; $(STAGING_DIR)/boot || /bin/&lt;span class=&quot;keyword&quot;&gt;true&lt;/span&gt;
+    $(INSTALL) -m &lt;span class=&quot;number&quot;&gt;0644&lt;/span&gt; $(@D)/boot/bootcode.bin $(STAGING_DIR)/boot
+    $(INSTALL) -m &lt;span class=&quot;number&quot;&gt;0644&lt;/span&gt; $(@D)/boot/fixup.dat $(STAGING_DIR)/boot
+    $(INSTALL) -m &lt;span class=&quot;number&quot;&gt;0644&lt;/span&gt; $(@D)/boot/start.elf $(STAGING_DIR)/boot
+    &lt;span class=&quot;keyword&quot;&gt;echo&lt;/span&gt; &lt;span class=&quot;string&quot;&gt;&quot;$(call qstrip,$(BR2_PACKAGE_RPI_FIRMWARE_CMDLINE))&quot;&lt;/span&gt; &gt; $(STAGING_DIR)/boot/cmdline.txt
+endef
+
+$(&lt;span class=&quot;keyword&quot;&gt;eval&lt;/span&gt; $(generic-package))&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;code&gt;$(@D)&lt;/code&gt; is the build directory of the package (&lt;code&gt;output/build/rpi-firmware-ffbb918fd46f1b0b687a474857b370f24f71989d&lt;/code&gt; in this case).
+
+&lt;/p&gt;
+&lt;p&gt;We take advantage of the fact that a given commit on GitHub can be downloaded in .tar.gz format from the &lt;code&gt;https://github.com/&lt;user&gt;/&lt;repo&gt;/archive/&lt;sha1&gt;.tar.gz&lt;/code&gt; URL.
+
+&lt;/p&gt;
+&lt;p&gt;&lt;code&gt;RPI_FIRMWARE_INSTALL_STAGING = YES&lt;/code&gt; declares that this package wants to install something to &lt;code&gt;output/staging&lt;/code&gt; so the build process will execute the commands in &lt;code&gt;RPI_FIRMWARE_INSTALL_STAGING_CMDS&lt;/code&gt;.
+
+&lt;/p&gt;
+&lt;p&gt;The reason for assembling the boot directory under &lt;code&gt;staging&lt;/code&gt; is that we don&apos;t want these files to be present on &lt;code&gt;target&lt;/code&gt; (there we need an empty directory which will serve as a mount point).
+
+&lt;/p&gt;
+&lt;p&gt;To activate this package, we need to pull in its &lt;code&gt;Config.in&lt;/code&gt; from one of the main &lt;code&gt;Config.in&lt;/code&gt; files.
+
+&lt;/p&gt;
+&lt;p&gt;As we&apos;ll most likely create several RPi-specific packages, I created the following &lt;code&gt;Config.in&lt;/code&gt; in the &lt;code&gt;package/rpi&lt;/code&gt; directory:
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;menu &quot;Raspberry Pi&quot;
+source &quot;package/rpi/rpi-firmware/Config.in&quot;
+endmenu&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;and sourced it at the end of &lt;code&gt;package/Config.in&lt;/code&gt; (before the last &lt;code&gt;endmenu&lt;/code&gt;):
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;source &quot;package/rpi/Config.in&quot;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;The result: a new menu entry - &lt;code&gt;Raspberry Pi&lt;/code&gt; - shows up under &lt;code&gt;Package Selection for the target&lt;/code&gt;, and when we enter it, we see the options defined by &lt;code&gt;package/rpi/rpi-firmware/Config.in&lt;/code&gt;.
+
+&lt;/p&gt;
+&lt;p&gt;The corresponding makefile (&lt;code&gt;package/rpi/rpi.mk&lt;/code&gt;):
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;include package/rpi/*/*.mk&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;This just pulls in all the package-specific makefiles it finds under the &lt;code&gt;package/rpi/*&lt;/code&gt; directories.
+
+&lt;/p&gt;
+&lt;p&gt;The last thing we must do is to package up the contents of the staging &lt;code&gt;/boot&lt;/code&gt; folder to &lt;code&gt;output/images/bootfs.tar.gz&lt;/code&gt;. Let&apos;s do this with an images install:
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;RPI_FIRMWARE_INSTALL_IMAGES = YES
+
+define RPI_FIRMWARE_INSTALL_IMAGES_CMDS
+    $(INSTALL) -m 0644 $(BINARIES_DIR)/zImage $(STAGING_DIR)/boot/kernel.img
+    tar -C $(STAGING_DIR)/boot -cvzf $(BINARIES_DIR)/bootfs.tar.gz .
+endef&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;First we copy the kernel zImage to &lt;code&gt;/boot&lt;/code&gt; on staging (&lt;code&gt;BINARIES_DIR&lt;/code&gt; is specified by the top-level Makefile), then we create the tar.gz.
+
+&lt;/p&gt;
+&lt;p&gt;As we need the kernel image before we can pack up &lt;code&gt;bootfs.tar.gz&lt;/code&gt;, we have to declare a dependency on the &lt;code&gt;linux&lt;/code&gt; package:
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;RPI_FIRMWARE_DEPENDENCIES = linux&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;That&apos;s all.
+
+&lt;/p&gt;
+&lt;h5&gt;Creating a package for RPi userland&lt;/h5&gt;
+&lt;p&gt;The RPi userland consists of the following libraries:
+
+&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;libbcm_host.so&lt;/li&gt;
+&lt;li&gt;libEGL.so&lt;/li&gt;
+&lt;li&gt;libGLESv2.so&lt;/li&gt;
+&lt;li&gt;libmmal.so&lt;/li&gt;
+&lt;li&gt;libmmal_vc_client.so&lt;/li&gt;
+&lt;li&gt;libopenmaxil.so&lt;/li&gt;
+&lt;li&gt;libOpenVG.so&lt;/li&gt;
+&lt;li&gt;libvchiq_arm.so&lt;/li&gt;
+&lt;li&gt;libvcos.so&lt;/li&gt;
+&lt;li&gt;libWFC.so&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;These will become important when we want to experiment with the facilities provided by the Broadcom VideoCore GPU from our programs.
+
+&lt;/p&gt;
+&lt;p&gt;Fortunately, the complete source code of these libraries is &lt;a href=&quot;https://github.com/raspberrypi/userland&quot;&gt;available&lt;/a&gt; on GitHub and the package uses &lt;code&gt;cmake&lt;/code&gt; as its build system which means it&apos;s a snap to integrate it into Buildroot.
+
+&lt;/p&gt;
+&lt;p&gt;Here are all the files required for our new package &lt;code&gt;rpi-userland&lt;/code&gt;:
+
+&lt;/p&gt;
+&lt;p&gt;&lt;code&gt;package/rpi/rpi-userland/Config.in&lt;/code&gt;:
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;config BR2_PACKAGE_RPI_USERLAND
+    bool &lt;span class=&quot;string&quot;&gt;&quot;Raspberry Pi userland&quot;&lt;/span&gt;
+    help
+      Raspberry Pi Userland
+
+      https:&lt;span class=&quot;comment&quot;&gt;//github.com/raspberrypi/userland/&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;(Don&apos;t forget to reference it from &lt;code&gt;package/rpi/Config.in&lt;/code&gt;.)
+
+&lt;/p&gt;
+&lt;p&gt;&lt;code&gt;package/rpi/rpi-userland/rpi-userland.mk&lt;/code&gt;:
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;#############################################################
+#
+# rpi-userland
+#
+#############################################################
+RPI_USERLAND_VERSION = 9852ce28826889e50c4d6786b942f51bccccac54
+RPI_USERLAND_SITE = https://github.com/raspberrypi/userland/archive
+RPI_USERLAND_SOURCE = 9852ce28826889e50c4d6786b942f51bccccac54.tar.gz
+RPI_USERLAND_INSTALL_TARGET = YES
+
+define RPI_USERLAND_INSTALL_TARGET_CMDS
+        $(INSTALL) -m 0644 $(@D)/build/lib/*.so $(TARGET_DIR)/usr/lib
+        $(INSTALL) -m 0755 $(@D)/build/bin/* $(TARGET_DIR)/usr/bin
+endef
+
+$(eval $(cmake-package))&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;First I used &lt;code&gt;master&lt;/code&gt; as the value of &lt;code&gt;RPI_USERLAND_VERSION&lt;/code&gt;, but this led to name clashes between packages in the download directory (several packages wanted to download their archive to &lt;code&gt;master.tar.gz&lt;/code&gt;), so I switched to SHA-1 hashes instead.
+
+&lt;/p&gt;
+&lt;p&gt;One last thing before we can build this: the &lt;code&gt;interface/vcos/glibc/vcos_backtrace.c&lt;/code&gt; file must be patched because it refers to a C function (&lt;code&gt;backtrace&lt;/code&gt;) which is not available in µClibc:
+
+&lt;/p&gt;
+&lt;p&gt;&lt;code&gt;package/rpi/rpi-userland/rpi-userland-disable-backtrace.patch&lt;/code&gt;:
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;--- userland.old/&lt;span class=&quot;keyword&quot;&gt;interface&lt;/span&gt;/vcos/glibc/vcos_backtrace.c  &lt;span class=&quot;number&quot;&gt;2013&lt;/span&gt;-&lt;span class=&quot;number&quot;&gt;01&lt;/span&gt;-&lt;span class=&quot;number&quot;&gt;06&lt;/span&gt; &lt;span class=&quot;number&quot;&gt;21&lt;/span&gt;:&lt;span class=&quot;number&quot;&gt;19&lt;/span&gt;:&lt;span class=&quot;number&quot;&gt;45.642055469&lt;/span&gt; +&lt;span class=&quot;number&quot;&gt;0100&lt;/span&gt;
++++ userland.&lt;span class=&quot;keyword&quot;&gt;new&lt;/span&gt;/&lt;span class=&quot;keyword&quot;&gt;interface&lt;/span&gt;/vcos/glibc/vcos_backtrace.c  &lt;span class=&quot;number&quot;&gt;2013&lt;/span&gt;-&lt;span class=&quot;number&quot;&gt;01&lt;/span&gt;-&lt;span class=&quot;number&quot;&gt;06&lt;/span&gt; &lt;span class=&quot;number&quot;&gt;21&lt;/span&gt;:&lt;span class=&quot;number&quot;&gt;17&lt;/span&gt;:&lt;span class=&quot;number&quot;&gt;55.592626490&lt;/span&gt; +&lt;span class=&quot;number&quot;&gt;0100&lt;/span&gt;
+@@ -&lt;span class=&quot;number&quot;&gt;26&lt;/span&gt;,&lt;span class=&quot;number&quot;&gt;16&lt;/span&gt; +&lt;span class=&quot;number&quot;&gt;26&lt;/span&gt;,&lt;span class=&quot;number&quot;&gt;19&lt;/span&gt; @@
+ */
+
+ &lt;span class=&quot;comment&quot;&gt;#include &lt;interface/vcos/vcos.h&gt;&lt;/span&gt;
+-&lt;span class=&quot;comment&quot;&gt;#ifdef __linux__&lt;/span&gt;
++&lt;span class=&quot;comment&quot;&gt;#ifdef __GLIBC__&lt;/span&gt;
++&lt;span class=&quot;comment&quot;&gt;#ifndef __UCLIBC__&lt;/span&gt;
+ &lt;span class=&quot;comment&quot;&gt;#include &lt;execinfo.h&gt;&lt;/span&gt;
+ &lt;span class=&quot;comment&quot;&gt;#endif&lt;/span&gt;
++&lt;span class=&quot;comment&quot;&gt;#endif&lt;/span&gt;
+ &lt;span class=&quot;comment&quot;&gt;#include &lt;stdio.h&gt;&lt;/span&gt;
+ &lt;span class=&quot;comment&quot;&gt;#include &lt;stdlib.h&gt;&lt;/span&gt;
+ &lt;span class=&quot;comment&quot;&gt;#include &lt;sys/types.h&gt;&lt;/span&gt;
+
+ void vcos_backtrace_self(void)
+ {
+-&lt;span class=&quot;comment&quot;&gt;#ifdef __linux__&lt;/span&gt;
++&lt;span class=&quot;comment&quot;&gt;#ifdef __GLIBC__&lt;/span&gt;
++&lt;span class=&quot;comment&quot;&gt;#ifndef __UCLIBC__&lt;/span&gt;
+    void *stack[&lt;span class=&quot;number&quot;&gt;64&lt;/span&gt;];
+    int depth = backtrace(stack, sizeof(stack)/sizeof(stack[&lt;span class=&quot;number&quot;&gt;0&lt;/span&gt;]));
+    char **names = backtrace_symbols(stack, depth);
+@@ -&lt;span class=&quot;number&quot;&gt;49&lt;/span&gt;,&lt;span class=&quot;number&quot;&gt;5&lt;/span&gt; +&lt;span class=&quot;number&quot;&gt;52&lt;/span&gt;,&lt;span class=&quot;number&quot;&gt;6&lt;/span&gt; @@
+       free(names);
+    }
+ &lt;span class=&quot;comment&quot;&gt;#endif&lt;/span&gt;
++&lt;span class=&quot;comment&quot;&gt;#endif&lt;/span&gt;
+ }&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;(If you don&apos;t want to fiddle with copy/pasting these files, just fetch them from my Git repository at &lt;a href=&quot;https://github.com/cellux/rpi-buildroot&quot;&gt;https://github.com/cellux/rpi-buildroot&lt;/a&gt;)
+
+&lt;/p&gt;
+&lt;p&gt;Now execute &lt;code&gt;make menuconfig&lt;/code&gt;, enable the new package(s), &lt;code&gt;make&lt;/code&gt; the whole thing and unpack the resulting &lt;code&gt;bootfs.tar.gz&lt;/code&gt; and &lt;code&gt;rootfs.tar.gz&lt;/code&gt; (as root) to the correct places.
+
+&lt;/p&gt;
+&lt;p&gt;Happy hacking!
+&lt;/p&gt;
+</description>
+    </item>
+    <item>
+      <title>DIY Linux with Buildroot [1/2]</title>
+      <link>http://cellux.github.com/articles/diy-linux-with-buildroot-part-1/</link>
+      <pubDate>Wed, 09 Jan 2013 20:16:00 +0100</pubDate>
+      <guid isPermaLink="true">http://cellux.github.com/articles/diy-linux-with-buildroot-part-1/</guid>
+      <author></author>
+      <description>&lt;p&gt;In today&apos;s blog post I will explain how to build your own custom Linux system for the Raspberry Pi.
+
+&lt;/p&gt;
+&lt;p&gt;The ideal tool for such an endeavour would be an automated build system which took a set of requirements - the list of packages to include, kernel configuration, etc. - and created a self-contained root filesystem for the Pi, together with a freshly built kernel (&lt;code&gt;kernel.img&lt;/code&gt;), boot loader, firmware (&lt;code&gt;bootcode.bin&lt;/code&gt;, &lt;code&gt;start.elf&lt;/code&gt;) and config files (&lt;code&gt;config.txt&lt;/code&gt;, &lt;code&gt;cmdline.txt&lt;/code&gt;) ready to be placed onto the &lt;code&gt;/boot&lt;/code&gt; partition of the SD card.
+
+&lt;/p&gt;
+&lt;p&gt;As it turns out, there &lt;em&gt;is&lt;/em&gt; a system like that out there - it&apos;s called &lt;a href=&quot;http://buildroot.uclibc.org/&quot;&gt;Buildroot&lt;/a&gt; - and with a little bit of customization we can shape it exactly into the build system we want.
+
+&lt;/p&gt;
+&lt;p&gt;Buildroot grew out from the &lt;a href=&quot;http://uclibc.org/&quot;&gt;µClibc&lt;/a&gt; (microcontroller libc) project, a reimplementation of the standard Unix C library specially targeted for embedded Linux systems. The µClibc people needed a tool which would automate the creation of such systems and this need led them to the development of Buildroot.
+
+&lt;/p&gt;
+&lt;h5&gt;Test drive&lt;/h5&gt;
+&lt;p&gt;As the best way to learn something is by doing it, first I&apos;ll show you how to build a basic root filesystem.
+
+&lt;/p&gt;
+&lt;p&gt;Download and extract the latest stable Buildroot to a local directory:
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;bash&quot;&gt;mkdir -p &lt;span class=&quot;variable&quot;&gt;$HOME&lt;/span&gt;/buildroot
+cd &lt;span class=&quot;variable&quot;&gt;$HOME&lt;/span&gt;/buildroot
+wget http:&lt;span class=&quot;comment&quot;&gt;//buildroot.uclibc.org/downloads/buildroot-2012.11.1.tar.gz&lt;/span&gt;
+tar xvzf buildroot-&lt;span class=&quot;number&quot;&gt;2012.11&lt;/span&gt;.&lt;span class=&quot;number&quot;&gt;1&lt;/span&gt;.tar.gz&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;The archive will be unpacked into a directory called &lt;code&gt;buildroot-2012.11.1&lt;/code&gt;. Enter this directory (referred to as &lt;code&gt;$TOPDIR&lt;/code&gt; from now on):
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;bash&quot;&gt;cd buildroot-2012.11.1&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;and invoke the following make target to configure the system:
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;bash&quot;&gt;make menuconfig&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;The configuration tool uses &lt;code&gt;kconfig&lt;/code&gt;, so you&apos;ll find it quite familiar if you have ever configured a Linux kernel.
+
+&lt;/p&gt;
+&lt;p&gt;&lt;img src=&quot;buildroot.png&quot; width=&quot;100%&quot;/&gt;&lt;/p&gt;
+
+&lt;p&gt;Here are the settings you should change (everything else can be left at defaults):
+
+&lt;/p&gt;
+&lt;h6&gt;Top level configuration&lt;/h6&gt;
+&lt;table class=&quot;dl&quot;&gt;
+  &lt;tr&gt;
+    &lt;th&gt;Target Architecture&lt;/th&gt;
+    &lt;td&gt;&lt;code&gt;ARM (little endian)&lt;/code&gt;&lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+    &lt;th&gt;Target Architecture Variant&lt;/th&gt;
+    &lt;td&gt;&lt;code&gt;arm1176jzf-s&lt;/code&gt;&lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+    &lt;th&gt;Target ABI&lt;/th&gt;
+    &lt;td&gt;&lt;code&gt;EABI&lt;/code&gt;&lt;/td&gt;
+  &lt;/tr&gt;
+&lt;/table&gt;
+
+&lt;p&gt;These correspond to what we have on the Raspberry Pi.
+
+&lt;/p&gt;
+&lt;h6&gt;Build options&lt;/h6&gt;
+&lt;table class=&quot;dl&quot;&gt;
+  &lt;tr&gt;
+    &lt;th&gt;Download dir&lt;/th&gt;
+    &lt;td&gt;&lt;code&gt;$(HOME)/buildroot/dl&lt;/code&gt;&lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+    &lt;th&gt;Enable compiler cache&lt;/th&gt;
+    &lt;td&gt;&lt;code&gt;YES&lt;/code&gt;&lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+    &lt;th&gt;Compiler cache location&lt;/th&gt;
+    &lt;td&gt;&lt;code&gt;$(HOME)/buildroot/ccache&lt;/code&gt;&lt;/td&gt;
+  &lt;/tr&gt;
+&lt;/table&gt;
+
+&lt;p&gt;&lt;code&gt;Download dir&lt;/code&gt; specifies the directory where Buildroot will download the sources of all packages we have selected for the build. In the default setup, this is a directory under &lt;code&gt;$TOPDIR&lt;/code&gt;, but I preferred an external location to enable reuse and prevent accidental removal.
+
+&lt;/p&gt;
+&lt;p&gt;Buildroot can use &lt;a href=&quot;http://ccache.samba.org/&quot;&gt;ccache&lt;/a&gt; for compilation of C/C++ source code; this means that object files built with a given command line (compiler configuration) are saved in a cache and are reused when the same object file is to be built again. This saves a lot of time with repeated builds (typical when tinkering) so I turned it on.
+
+&lt;/p&gt;
+&lt;h6&gt;Toolchain&lt;/h6&gt;
+&lt;table class=&quot;dl&quot;&gt;
+  &lt;tr&gt;
+    &lt;th&gt;Kernel Headers&lt;/th&gt;
+    &lt;td&gt;&lt;code&gt;Linux 3.6.x kernel headers&lt;/code&gt;&lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+    &lt;th&gt;GCC compiler Version&lt;/th&gt;
+    &lt;td&gt;&lt;code&gt;GCC 4.7.x&lt;/code&gt;&lt;/td&gt;
+  &lt;/tr&gt;
+&lt;/table&gt;
+
+&lt;p&gt;We&apos;ll use the latest &lt;code&gt;rpi-3.6.y&lt;/code&gt; kernel branch from the &lt;a href=&quot;https://github.com/raspberrypi/linux&quot;&gt;foundation&apos;s git repository&lt;/a&gt;, so here we select matching kernel headers.
+
+&lt;/p&gt;
+&lt;table class=&quot;dl&quot;&gt;
+  &lt;tr&gt;
+    &lt;th&gt;Purge unwanted locales&lt;/th&gt;
+    &lt;td&gt;&lt;code&gt;YES&lt;/code&gt;&lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+    &lt;th&gt;Locales to keep&lt;/th&gt;
+    &lt;td&gt;&lt;code&gt;C en_US&lt;/code&gt;&lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+    &lt;th&gt;Generate locale data&lt;/th&gt;
+    &lt;td&gt;&lt;code&gt;en_US&lt;/code&gt;&lt;/td&gt;
+  &lt;/tr&gt;
+&lt;/table&gt;
+
+&lt;p&gt;You may want to add others - I prefer to keep these pruned to the absolute minimum.
+
+&lt;/p&gt;
+&lt;table class=&quot;dl&quot;&gt;
+  &lt;tr&gt;
+    &lt;th&gt;Use software floating point by default&lt;/th&gt;
+    &lt;td&gt;&lt;code&gt;NO&lt;/code&gt;&lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+    &lt;th&gt;Use ARM Vector Floating Point unit&lt;/th&gt;
+    &lt;td&gt;&lt;code&gt;YES&lt;/code&gt;&lt;/td&gt;
+  &lt;/tr&gt;
+&lt;/table&gt;
+
+&lt;p&gt;We need these for &lt;code&gt;hardfp&lt;/code&gt;. Essential stuff.
+
+&lt;/p&gt;
+&lt;table class=&quot;dl&quot;&gt;
+  &lt;tr&gt;
+    &lt;th&gt;Enable large file (files &gt; 2 GB) support&lt;/th&gt;
+    &lt;td&gt;&lt;code&gt;YES&lt;/code&gt;&lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+    &lt;th&gt;Enable IPv6 support&lt;/th&gt;
+    &lt;td&gt;&lt;code&gt;YES&lt;/code&gt;&lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+    &lt;th&gt;Enable WCHAR support&lt;/th&gt;
+    &lt;td&gt;&lt;code&gt;YES&lt;/code&gt;&lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+    &lt;th&gt;Enable C++ support&lt;/th&gt;
+    &lt;td&gt;&lt;code&gt;YES&lt;/code&gt;&lt;/td&gt;
+  &lt;/tr&gt;
+&lt;/table&gt;
+
+&lt;p&gt;These seemed like a good idea (and without them, certain packages cannot be selected).
+
+&lt;/p&gt;
+&lt;h6&gt;System configuration&lt;/h6&gt;
+&lt;table class=&quot;dl&quot;&gt;
+  &lt;tr&gt;
+    &lt;th&gt;System hostname&lt;/th&gt;
+    &lt;td&gt;&lt;code&gt;rpi&lt;/code&gt;&lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+    &lt;th&gt;System banner&lt;/th&gt;
+    &lt;td&gt;&lt;code&gt;Welcome to Raspberry Pi!&lt;/code&gt;&lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+    &lt;th&gt;/dev management&lt;/th&gt;
+    &lt;td&gt;&lt;code&gt;Dynamic using mdev&lt;/code&gt;&lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+    &lt;th&gt;Port to run a getty (login prompt) on&lt;/th&gt;
+    &lt;td&gt;&lt;code&gt;tty1&lt;/code&gt;&lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+    &lt;th&gt;Baudrate to use&lt;/th&gt;
+    &lt;td&gt;&lt;code&gt;38400&lt;/code&gt;&lt;/td&gt;
+  &lt;/tr&gt;
+&lt;/table&gt;
+
+&lt;p&gt;The system hostname and the banner can be anything you wish.
+
+&lt;/p&gt;
+&lt;p&gt;&lt;code&gt;Dynamic using mdev&lt;/code&gt; means that:
+
+&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;Buildroot will mount the kernel-provided &lt;code&gt;devtmpfs&lt;/code&gt; filesystem to &lt;code&gt;/dev&lt;/code&gt; - this pseudo fs is automatically populated when Linux detects new hardware&lt;/li&gt;
+&lt;li&gt;we&apos;ll be able to write hotplug scripts to handle device attach/disconnect events, which sounds nice&lt;/li&gt;
+&lt;/ol&gt;
+&lt;p&gt;The getty baudrate is 38400 because that&apos;s what I&apos;ve seen in my &lt;code&gt;/etc/inittab&lt;/code&gt;.
+
+&lt;/p&gt;
+&lt;h6&gt;Package selection for target&lt;/h6&gt;
+&lt;p&gt;This is the section where you specify which packages get in and which will be left out.
+
+&lt;/p&gt;
+&lt;p&gt;&lt;a href=&quot;http://www.busybox.net/&quot;&gt;Busybox&lt;/a&gt; - which is enabled by default - gives us a fairly complete userland, so the only extra you should enable here is &lt;a href=&quot;https://matt.ucc.asn.au/dropbear/dropbear.html&quot;&gt;dropbear&lt;/a&gt;, a small SSH server under &lt;code&gt;Networking applications&lt;/code&gt; which will let us log in remotely.
+
+&lt;/p&gt;
+&lt;p&gt;You may select other packages too, as you see fit.
+
+&lt;/p&gt;
+&lt;h6&gt;Filesystem images&lt;/h6&gt;
+&lt;table class=&quot;dl&quot;&gt;
+  &lt;tr&gt;
+    &lt;th&gt;Compression method&lt;/th&gt;
+    &lt;td&gt;&lt;code&gt;gzip&lt;/code&gt;&lt;/td&gt;
+  &lt;/tr&gt;
+&lt;/table&gt;
+
+&lt;p&gt;Here we ask Buildroot to generate a &lt;code&gt;rootfs.tar.gz&lt;/code&gt; (besides &lt;code&gt;rootfs.tar&lt;/code&gt;).
+
+&lt;/p&gt;
+&lt;h6&gt;Kernel&lt;/h6&gt;
+&lt;table class=&quot;dl&quot;&gt;
+  &lt;tr&gt;
+    &lt;th&gt;Linux Kernel&lt;/th&gt;
+    &lt;td&gt;&lt;code&gt;YES&lt;/code&gt;&lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+    &lt;th&gt;Kernel version&lt;/th&gt;
+    &lt;td&gt;&lt;code&gt;Custom Git tree&lt;/code&gt;&lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+    &lt;th&gt;URL of custom Git repository&lt;/th&gt;
+    &lt;td&gt;&lt;code&gt;https://github.com/raspberrypi/linux&lt;/code&gt;&lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+    &lt;th&gt;Custom Git version&lt;/th&gt;
+    &lt;td&gt;&lt;code&gt;rpi-3.6.y&lt;/code&gt;&lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+    &lt;th&gt;Kernel configuration&lt;/th&gt;
+    &lt;td&gt;&lt;code&gt;Using a defconfig&lt;/code&gt;&lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+    &lt;th&gt;Defconfig name&lt;/th&gt;
+    &lt;td&gt;&lt;code&gt;bcmrpi&lt;/code&gt;&lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+    &lt;th&gt;Kernel binary format&lt;/th&gt;
+    &lt;td&gt;&lt;code&gt;zImage&lt;/code&gt;&lt;/td&gt;
+  &lt;/tr&gt;
+&lt;/table&gt;
+
+&lt;p&gt;With these settings, Buildroot will clone the foundation&apos;s &lt;code&gt;rpi-3.6.y&lt;/code&gt; branch, configure it using &lt;code&gt;arch/arm/configs/bcmrpi_defconfig&lt;/code&gt; (included in the source) and build a &lt;code&gt;zImage&lt;/code&gt; which we can then shove into &lt;code&gt;/boot&lt;/code&gt;. (Note that post-processing with the &lt;code&gt;imagetool-uncompressed.py&lt;/code&gt; script is not needed anymore as the latest firmware can load &lt;code&gt;zImage&lt;/code&gt; kernels without a hitch.)
+
+&lt;/p&gt;
+&lt;p&gt;Now exit the configuration program - save the new configuration as you leave! - and initiate a full build of the system by executing:
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;bash&quot;&gt;make all&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Buildroot will go through the following steps:
+
+&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;Build a compiler toolchain (gcc, binutils, libtool, autoconf, automake, m4, cmake, pkg-config, etc.) for the host machine running Buildroot &lt;br/&gt;=&gt; &lt;code&gt;$TOPDIR/output/host&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;Build a &lt;code&gt;gcc&lt;/code&gt; which can cross-compile to the ARM architecture, together with an ARM µClibc &lt;br/&gt;=&gt; &lt;code&gt;$TOPDIR/output/toolchain&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;Unpack, configure and build all selected packages using the compiler (and µClibc) built in step 2 &lt;br/&gt;=&gt; &lt;code&gt;$TOPDIR/output/build/&lt;package&gt;-&lt;version&gt;&lt;/code&gt;&lt;br/&gt;(build dependencies are also installed to &lt;code&gt;$TOPDIR/output/staging&lt;/code&gt;)&lt;/li&gt;
+&lt;li&gt;Install packages &lt;br/&gt;=&gt; &lt;code&gt;$TOPDIR/output/target&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;Create a root file system image &lt;br/&gt;=&gt; &lt;code&gt;$TOPDIR/output/images/rootfs.tar.gz&lt;/code&gt;&lt;br/&gt;and install the kernel&lt;br/&gt;=&gt; &lt;code&gt;$TOPDIR/output/images/zImage&lt;/code&gt;&lt;/li&gt;
+&lt;/ol&gt;
+&lt;h5&gt;Post-build fixup&lt;/h5&gt;
+&lt;p&gt;There are some minor issues which we&apos;ll have to deal with before we can use our freshly baked root fs on the Pi.
+
+&lt;/p&gt;
+&lt;p&gt;As root, unpack &lt;code&gt;output/images/rootfs.tar.gz&lt;/code&gt; to its destined place (most likely &lt;code&gt;/dev/mmcblk0p2&lt;/code&gt; or your NFS root - we&apos;ll call this place &lt;code&gt;$ROOTDIR&lt;/code&gt; from now on) and go through the following steps:
+
+&lt;/p&gt;
+&lt;h6&gt;Set a root password&lt;/h6&gt;
+&lt;p&gt;In the default fs, root has no password:
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;bash&quot;&gt;&lt;span class=&quot;comment&quot;&gt;# cat /etc/shadow&lt;/span&gt;
+root::&lt;span class=&quot;number&quot;&gt;10933&lt;/span&gt;:&lt;span class=&quot;number&quot;&gt;0&lt;/span&gt;:&lt;span class=&quot;number&quot;&gt;99999&lt;/span&gt;:&lt;span class=&quot;number&quot;&gt;7&lt;/span&gt;:::
+bin:*:&lt;span class=&quot;number&quot;&gt;10933&lt;/span&gt;:&lt;span class=&quot;number&quot;&gt;0&lt;/span&gt;:&lt;span class=&quot;number&quot;&gt;99999&lt;/span&gt;:&lt;span class=&quot;number&quot;&gt;7&lt;/span&gt;:::
+daemon:*:&lt;span class=&quot;number&quot;&gt;10933&lt;/span&gt;:&lt;span class=&quot;number&quot;&gt;0&lt;/span&gt;:&lt;span class=&quot;number&quot;&gt;99999&lt;/span&gt;:&lt;span class=&quot;number&quot;&gt;7&lt;/span&gt;:::
+adm:*:&lt;span class=&quot;number&quot;&gt;10933&lt;/span&gt;:&lt;span class=&quot;number&quot;&gt;0&lt;/span&gt;:&lt;span class=&quot;number&quot;&gt;99999&lt;/span&gt;:&lt;span class=&quot;number&quot;&gt;7&lt;/span&gt;:::
+lp:*:&lt;span class=&quot;number&quot;&gt;10933&lt;/span&gt;:&lt;span class=&quot;number&quot;&gt;0&lt;/span&gt;:&lt;span class=&quot;number&quot;&gt;99999&lt;/span&gt;:&lt;span class=&quot;number&quot;&gt;7&lt;/span&gt;:::
+sync:*:&lt;span class=&quot;number&quot;&gt;10933&lt;/span&gt;:&lt;span class=&quot;number&quot;&gt;0&lt;/span&gt;:&lt;span class=&quot;number&quot;&gt;99999&lt;/span&gt;:&lt;span class=&quot;number&quot;&gt;7&lt;/span&gt;:::
+shutdown:*:&lt;span class=&quot;number&quot;&gt;10933&lt;/span&gt;:&lt;span class=&quot;number&quot;&gt;0&lt;/span&gt;:&lt;span class=&quot;number&quot;&gt;99999&lt;/span&gt;:&lt;span class=&quot;number&quot;&gt;7&lt;/span&gt;:::
+halt:*:&lt;span class=&quot;number&quot;&gt;10933&lt;/span&gt;:&lt;span class=&quot;number&quot;&gt;0&lt;/span&gt;:&lt;span class=&quot;number&quot;&gt;99999&lt;/span&gt;:&lt;span class=&quot;number&quot;&gt;7&lt;/span&gt;:::
+uucp:*:&lt;span class=&quot;number&quot;&gt;10933&lt;/span&gt;:&lt;span class=&quot;number&quot;&gt;0&lt;/span&gt;:&lt;span class=&quot;number&quot;&gt;99999&lt;/span&gt;:&lt;span class=&quot;number&quot;&gt;7&lt;/span&gt;:::
+operator:*:&lt;span class=&quot;number&quot;&gt;10933&lt;/span&gt;:&lt;span class=&quot;number&quot;&gt;0&lt;/span&gt;:&lt;span class=&quot;number&quot;&gt;99999&lt;/span&gt;:&lt;span class=&quot;number&quot;&gt;7&lt;/span&gt;:::
+ftp:*:&lt;span class=&quot;number&quot;&gt;10933&lt;/span&gt;:&lt;span class=&quot;number&quot;&gt;0&lt;/span&gt;:&lt;span class=&quot;number&quot;&gt;99999&lt;/span&gt;:&lt;span class=&quot;number&quot;&gt;7&lt;/span&gt;:::
+nobody:*:&lt;span class=&quot;number&quot;&gt;10933&lt;/span&gt;:&lt;span class=&quot;number&quot;&gt;0&lt;/span&gt;:&lt;span class=&quot;number&quot;&gt;99999&lt;/span&gt;:&lt;span class=&quot;number&quot;&gt;7&lt;/span&gt;:::
+&lt;span class=&quot;keyword&quot;&gt;default&lt;/span&gt;::&lt;span class=&quot;number&quot;&gt;10933&lt;/span&gt;:&lt;span class=&quot;number&quot;&gt;0&lt;/span&gt;:&lt;span class=&quot;number&quot;&gt;99999&lt;/span&gt;:&lt;span class=&quot;number&quot;&gt;7&lt;/span&gt;:::&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;This would be fine if we logged in via the console (or over telnet), but dropbear &lt;em&gt;requires&lt;/em&gt; a password to be set if we want to SSH to the box.
+
+&lt;/p&gt;
+&lt;p&gt;A crypt-based password is fine, so let&apos;s create a crypted version of the word &lt;code&gt;passpass&lt;/code&gt; and set it as the root password in &lt;code&gt;/etc/shadow&lt;/code&gt;:
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;bash&quot;&gt;CRYPTEDPASS=$(perl -e &lt;span class=&quot;string&quot;&gt;'print crypt(&quot;passpass&quot;,&quot;salt&quot;)'&lt;/span&gt;)
+sed -i -e &lt;span class=&quot;string&quot;&gt;&quot;s#^root:[^:]*:#root:$CRYPTEDPASS:#&quot;&lt;/span&gt; &lt;span class=&quot;variable&quot;&gt;$ROOTDIR&lt;/span&gt;/etc/shadow&lt;/code&gt;&lt;/pre&gt;
+&lt;h6&gt;Mount /boot&lt;/h6&gt;
+&lt;p&gt;We want to mount &lt;code&gt;/dev/mmcblk0p1&lt;/code&gt; to &lt;code&gt;/boot&lt;/code&gt; on the Pi, so we create a mount point and write the necessary entry to &lt;code&gt;/etc/fstab&lt;/code&gt;:
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;bash&quot;&gt;install -d -m &lt;span class=&quot;number&quot;&gt;0755&lt;/span&gt; &lt;span class=&quot;variable&quot;&gt;$ROOTDIR&lt;/span&gt;/boot
+&lt;span class=&quot;keyword&quot;&gt;echo&lt;/span&gt; &lt;span class=&quot;string&quot;&gt;'/dev/mmcblk0p1 /boot vfat defaults 0 0'&lt;/span&gt; &gt;&gt; &lt;span class=&quot;variable&quot;&gt;$ROOTDIR&lt;/span&gt;/etc/fstab&lt;/code&gt;&lt;/pre&gt;
+&lt;h6&gt;Copy firmware files and kernel to /boot&lt;/h6&gt;
+&lt;p&gt;Mount the SD card&apos;s first partition to - let&apos;s say - &lt;code&gt;/mnt/rpi/boot&lt;/code&gt; (&lt;code&gt;$BOOTDIR&lt;/code&gt;), then:
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;bash&quot;&gt;cp &lt;span class=&quot;variable&quot;&gt;$TOPDIR&lt;/span&gt;/output/images/zImage &lt;span class=&quot;variable&quot;&gt;$BOOTDIR&lt;/span&gt;/kernel.img
+git &lt;span class=&quot;keyword&quot;&gt;clone&lt;/span&gt; https:&lt;span class=&quot;comment&quot;&gt;//github.com/raspberrypi/firmware&lt;/span&gt;
+cp firmware/boot/bootcode.bin &lt;span class=&quot;variable&quot;&gt;$BOOTDIR&lt;/span&gt;
+cp firmware/boot/start.elf &lt;span class=&quot;variable&quot;&gt;$BOOTDIR&lt;/span&gt;
+cp firmware/boot/fixup.dat &lt;span class=&quot;variable&quot;&gt;$BOOTDIR&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;We also need a command line for our kernel, so put the following line into &lt;code&gt;$BOOTDIR/cmdline.txt&lt;/code&gt;:
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;dwc_otg.lpm_enable=0 console=ttyAMA0,115200 kgdboc=ttyAMA0,115200 console=tty1 elevator=deadline rootwait root=/dev/mmcblk0p2 rootfstype=ext4&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;This comes from Raspbian, you may vary it as you wish - here is my latest NFS root cmdline for example:
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;dwc_otg.lpm_enable=0 console=ttyAMA0,115200 kgdboc=ttyAMA0,115200 console=tty1 elevator=deadline rootwait ip=::::rpi::dhcp root=/dev/nfs nfsroot=192.168.1.1:/mnt/shares/rpifs/nfsroot,tcp,rsize=32768,wsize=32768&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;(For the syntax and semantics of the &lt;code&gt;ip&lt;/code&gt; parameter see the relevant &lt;a href=&quot;https://www.kernel.org/doc/Documentation/filesystems/nfs/nfsroot.txt&quot;&gt;kernel docs&lt;/a&gt;.)
+
+&lt;/p&gt;
+&lt;p&gt;Now the system is ready: put the SD card into your Pi and hope for the best. :-) (But seriously, it should work.)
+
+&lt;/p&gt;
+&lt;p&gt;&lt;a href=&quot;http://cellux.github.com/articles/diy-linux-with-buildroot-part-2/&quot;&gt;Continue to part 2&lt;/a&gt;
+
+&lt;/p&gt;
+</description>
+    </item>
     <item>
       <title>Moving to NFS root</title>
       <link>http://cellux.github.com/articles/moving-to-nfs-root/</link>

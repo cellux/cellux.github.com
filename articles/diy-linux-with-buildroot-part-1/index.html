@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+  <!-- hi visitor! if you need my e-mail address, execute show_me_your_email_address() in your favorite web console. -->
+  <head>
+    <meta charset="utf-8">
+    <title>DIY Linux with Buildroot [1/2] - Raspberry Pie
+    </title>
+    <link rel="alternate" href="http://cellux.github.com/feed.xml" type="application/rss+xml" title="My personal adventures in the world of the Raspberry Pi">
+    <link rel="stylesheet" href="/css/normalize.css">
+    <link rel="stylesheet" href="/css/960.css">
+    <link rel="stylesheet" href="/css/fbg.css">
+    <link rel="stylesheet" href="/css/main.css">
+    <script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/jquery/1/jquery.js"></script>
+    <script type="text/javascript" src="/js/galleria-1.2.8.min.js"></script>
+    <script type="text/javascript" src="/js/main.js"></script>
+  </head>
+  <body>
+    <div class="container_12">
+      <header>
+        <div class="grid_4"><img src="/images/raspberry_184px.jpg" width="215px" height="184px"></div>
+        <div class="grid_7 suffix_1"><img src="/images/adventures_in_the_world_of_the_raspberry_pi.png" style="float: right; margin-top: 161px;"></div>
+        <div class="clear"></div>
+        <div class="grid_12">
+          <div><img id="head-sep" src="/images/sep.png"></div>
+          <div id="nav" style="float:right;"><a href="/articles/my-first-day-with-the-raspberry-pi/"><img src="/images/nav-first.png" style="left: 0px"></a><a href="/articles/moving-to-nfs-root/"><img src="/images/nav-prev.png" style="left: 25px"></a><a href="/archive.html"><img src="/images/nav-list.png" style="left: 50px"></a><a href="/articles/diy-linux-with-buildroot-part-2/"><img src="/images/nav-next.png" style="left: 75px"></a><a href="/articles/diy-linux-with-buildroot-part-2/"><img src="/images/nav-last.png" style="left: 100px"></a></div>
+        </div>
+        <div class="clear"></div>
+      </header>
+      <div id="content">
+        <article class="post">
+          <h4>DIY Linux with Buildroot [1/2]</h4>
+          <section class="content"><p>In today&apos;s blog post I will explain how to build your own custom Linux system for the Raspberry Pi.
+
+</p>
+<p>The ideal tool for such an endeavour would be an automated build system which took a set of requirements - the list of packages to include, kernel configuration, etc. - and created a self-contained root filesystem for the Pi, together with a freshly built kernel (<code>kernel.img</code>), boot loader, firmware (<code>bootcode.bin</code>, <code>start.elf</code>) and config files (<code>config.txt</code>, <code>cmdline.txt</code>) ready to be placed onto the <code>/boot</code> partition of the SD card.
+
+</p>
+<p>As it turns out, there <em>is</em> a system like that out there - it&apos;s called <a href="http://buildroot.uclibc.org/">Buildroot</a> - and with a little bit of customization we can shape it exactly into the build system we want.
+
+</p>
+<p>Buildroot grew out from the <a href="http://uclibc.org/">µClibc</a> (microcontroller libc) project, a reimplementation of the standard Unix C library specially targeted for embedded Linux systems. The µClibc people needed a tool which would automate the creation of such systems and this need led them to the development of Buildroot.
+
+</p>
+<h5>Test drive</h5>
+<p>As the best way to learn something is by doing it, first I&apos;ll show you how to build a basic root filesystem.
+
+</p>
+<p>Download and extract the latest stable Buildroot to a local directory:
+
+</p>
+<pre><code class="bash">mkdir -p <span class="variable">$HOME</span>/buildroot
+cd <span class="variable">$HOME</span>/buildroot
+wget http:<span class="comment">//buildroot.uclibc.org/downloads/buildroot-2012.11.1.tar.gz</span>
+tar xvzf buildroot-<span class="number">2012.11</span>.<span class="number">1</span>.tar.gz</code></pre>
+<p>The archive will be unpacked into a directory called <code>buildroot-2012.11.1</code>. Enter this directory (referred to as <code>$TOPDIR</code> from now on):
+
+</p>
+<pre><code class="bash">cd buildroot-2012.11.1</code></pre>
+<p>and invoke the following make target to configure the system:
+
+</p>
+<pre><code class="bash">make menuconfig</code></pre>
+<p>The configuration tool uses <code>kconfig</code>, so you&apos;ll find it quite familiar if you have ever configured a Linux kernel.
+
+</p>
+<p><img src="buildroot.png" width="100%"/></p>
+
+<p>Here are the settings you should change (everything else can be left at defaults):
+
+</p>
+<h6>Top level configuration</h6>
+<table class="dl">
+  <tr>
+    <th>Target Architecture</th>
+    <td><code>ARM (little endian)</code></td>
+  </tr>
+  <tr>
+    <th>Target Architecture Variant</th>
+    <td><code>arm1176jzf-s</code></td>
+  </tr>
+  <tr>
+    <th>Target ABI</th>
+    <td><code>EABI</code></td>
+  </tr>
+</table>
+
+<p>These correspond to what we have on the Raspberry Pi.
+
+</p>
+<h6>Build options</h6>
+<table class="dl">
+  <tr>
+    <th>Download dir</th>
+    <td><code>$(HOME)/buildroot/dl</code></td>
+  </tr>
+  <tr>
+    <th>Enable compiler cache</th>
+    <td><code>YES</code></td>
+  </tr>
+  <tr>
+    <th>Compiler cache location</th>
+    <td><code>$(HOME)/buildroot/ccache</code></td>
+  </tr>
+</table>
+
+<p><code>Download dir</code> specifies the directory where Buildroot will download the sources of all packages we have selected for the build. In the default setup, this is a directory under <code>$TOPDIR</code>, but I preferred an external location to enable reuse and prevent accidental removal.
+
+</p>
+<p>Buildroot can use <a href="http://ccache.samba.org/">ccache</a> for compilation of C/C++ source code; this means that object files built with a given command line (compiler configuration) are saved in a cache and are reused when the same object file is to be built again. This saves a lot of time with repeated builds (typical when tinkering) so I turned it on.
+
+</p>
+<h6>Toolchain</h6>
+<table class="dl">
+  <tr>
+    <th>Kernel Headers</th>
+    <td><code>Linux 3.6.x kernel headers</code></td>
+  </tr>
+  <tr>
+    <th>GCC compiler Version</th>
+    <td><code>GCC 4.7.x</code></td>
+  </tr>
+</table>
+
+<p>We&apos;ll use the latest <code>rpi-3.6.y</code> kernel branch from the <a href="https://github.com/raspberrypi/linux">foundation&apos;s git repository</a>, so here we select matching kernel headers.
+
+</p>
+<table class="dl">
+  <tr>
+    <th>Purge unwanted locales</th>
+    <td><code>YES</code></td>
+  </tr>
+  <tr>
+    <th>Locales to keep</th>
+    <td><code>C en_US</code></td>
+  </tr>
+  <tr>
+    <th>Generate locale data</th>
+    <td><code>en_US</code></td>
+  </tr>
+</table>
+
+<p>You may want to add others - I prefer to keep these pruned to the absolute minimum.
+
+</p>
+<table class="dl">
+  <tr>
+    <th>Use software floating point by default</th>
+    <td><code>NO</code></td>
+  </tr>
+  <tr>
+    <th>Use ARM Vector Floating Point unit</th>
+    <td><code>YES</code></td>
+  </tr>
+</table>
+
+<p>We need these for <code>hardfp</code>. Essential stuff.
+
+</p>
+<table class="dl">
+  <tr>
+    <th>Enable large file (files &gt; 2 GB) support</th>
+    <td><code>YES</code></td>
+  </tr>
+  <tr>
+    <th>Enable IPv6 support</th>
+    <td><code>YES</code></td>
+  </tr>
+  <tr>
+    <th>Enable WCHAR support</th>
+    <td><code>YES</code></td>
+  </tr>
+  <tr>
+    <th>Enable C++ support</th>
+    <td><code>YES</code></td>
+  </tr>
+</table>
+
+<p>These seemed like a good idea (and without them, certain packages cannot be selected).
+
+</p>
+<h6>System configuration</h6>
+<table class="dl">
+  <tr>
+    <th>System hostname</th>
+    <td><code>rpi</code></td>
+  </tr>
+  <tr>
+    <th>System banner</th>
+    <td><code>Welcome to Raspberry Pi!</code></td>
+  </tr>
+  <tr>
+    <th>/dev management</th>
+    <td><code>Dynamic using mdev</code></td>
+  </tr>
+  <tr>
+    <th>Port to run a getty (login prompt) on</th>
+    <td><code>tty1</code></td>
+  </tr>
+  <tr>
+    <th>Baudrate to use</th>
+    <td><code>38400</code></td>
+  </tr>
+</table>
+
+<p>The system hostname and the banner can be anything you wish.
+
+</p>
+<p><code>Dynamic using mdev</code> means that:
+
+</p>
+<ol>
+<li>Buildroot will mount the kernel-provided <code>devtmpfs</code> filesystem to <code>/dev</code> - this pseudo fs is automatically populated when Linux detects new hardware</li>
+<li>we&apos;ll be able to write hotplug scripts to handle device attach/disconnect events, which sounds nice</li>
+</ol>
+<p>The getty baudrate is 38400 because that&apos;s what I&apos;ve seen in my <code>/etc/inittab</code>.
+
+</p>
+<h6>Package selection for target</h6>
+<p>This is the section where you specify which packages get in and which will be left out.
+
+</p>
+<p><a href="http://www.busybox.net/">Busybox</a> - which is enabled by default - gives us a fairly complete userland, so the only extra you should enable here is <a href="https://matt.ucc.asn.au/dropbear/dropbear.html">dropbear</a>, a small SSH server under <code>Networking applications</code> which will let us log in remotely.
+
+</p>
+<p>You may select other packages too, as you see fit.
+
+</p>
+<h6>Filesystem images</h6>
+<table class="dl">
+  <tr>
+    <th>Compression method</th>
+    <td><code>gzip</code></td>
+  </tr>
+</table>
+
+<p>Here we ask Buildroot to generate a <code>rootfs.tar.gz</code> (besides <code>rootfs.tar</code>).
+
+</p>
+<h6>Kernel</h6>
+<table class="dl">
+  <tr>
+    <th>Linux Kernel</th>
+    <td><code>YES</code></td>
+  </tr>
+  <tr>
+    <th>Kernel version</th>
+    <td><code>Custom Git tree</code></td>
+  </tr>
+  <tr>
+    <th>URL of custom Git repository</th>
+    <td><code>https://github.com/raspberrypi/linux</code></td>
+  </tr>
+  <tr>
+    <th>Custom Git version</th>
+    <td><code>rpi-3.6.y</code></td>
+  </tr>
+  <tr>
+    <th>Kernel configuration</th>
+    <td><code>Using a defconfig</code></td>
+  </tr>
+  <tr>
+    <th>Defconfig name</th>
+    <td><code>bcmrpi</code></td>
+  </tr>
+  <tr>
+    <th>Kernel binary format</th>
+    <td><code>zImage</code></td>
+  </tr>
+</table>
+
+<p>With these settings, Buildroot will clone the foundation&apos;s <code>rpi-3.6.y</code> branch, configure it using <code>arch/arm/configs/bcmrpi_defconfig</code> (included in the source) and build a <code>zImage</code> which we can then shove into <code>/boot</code>. (Note that post-processing with the <code>imagetool-uncompressed.py</code> script is not needed anymore as the latest firmware can load <code>zImage</code> kernels without a hitch.)
+
+</p>
+<p>Now exit the configuration program - save the new configuration as you leave! - and initiate a full build of the system by executing:
+
+</p>
+<pre><code class="bash">make all</code></pre>
+<p>Buildroot will go through the following steps:
+
+</p>
+<ol>
+<li>Build a compiler toolchain (gcc, binutils, libtool, autoconf, automake, m4, cmake, pkg-config, etc.) for the host machine running Buildroot <br/>=&gt; <code>$TOPDIR/output/host</code></li>
+<li>Build a <code>gcc</code> which can cross-compile to the ARM architecture, together with an ARM µClibc <br/>=&gt; <code>$TOPDIR/output/toolchain</code></li>
+<li>Unpack, configure and build all selected packages using the compiler (and µClibc) built in step 2 <br/>=&gt; <code>$TOPDIR/output/build/&lt;package&gt;-&lt;version&gt;</code><br/>(build dependencies are also installed to <code>$TOPDIR/output/staging</code>)</li>
+<li>Install packages <br/>=&gt; <code>$TOPDIR/output/target</code></li>
+<li>Create a root file system image <br/>=&gt; <code>$TOPDIR/output/images/rootfs.tar.gz</code><br/>and install the kernel<br/>=&gt; <code>$TOPDIR/output/images/zImage</code></li>
+</ol>
+<h5>Post-build fixup</h5>
+<p>There are some minor issues which we&apos;ll have to deal with before we can use our freshly baked root fs on the Pi.
+
+</p>
+<p>As root, unpack <code>output/images/rootfs.tar.gz</code> to its destined place (most likely <code>/dev/mmcblk0p2</code> or your NFS root - we&apos;ll call this place <code>$ROOTDIR</code> from now on) and go through the following steps:
+
+</p>
+<h6>Set a root password</h6>
+<p>In the default fs, root has no password:
+
+</p>
+<pre><code class="bash"><span class="comment"># cat /etc/shadow</span>
+root::<span class="number">10933</span>:<span class="number">0</span>:<span class="number">99999</span>:<span class="number">7</span>:::
+bin:*:<span class="number">10933</span>:<span class="number">0</span>:<span class="number">99999</span>:<span class="number">7</span>:::
+daemon:*:<span class="number">10933</span>:<span class="number">0</span>:<span class="number">99999</span>:<span class="number">7</span>:::
+adm:*:<span class="number">10933</span>:<span class="number">0</span>:<span class="number">99999</span>:<span class="number">7</span>:::
+lp:*:<span class="number">10933</span>:<span class="number">0</span>:<span class="number">99999</span>:<span class="number">7</span>:::
+sync:*:<span class="number">10933</span>:<span class="number">0</span>:<span class="number">99999</span>:<span class="number">7</span>:::
+shutdown:*:<span class="number">10933</span>:<span class="number">0</span>:<span class="number">99999</span>:<span class="number">7</span>:::
+halt:*:<span class="number">10933</span>:<span class="number">0</span>:<span class="number">99999</span>:<span class="number">7</span>:::
+uucp:*:<span class="number">10933</span>:<span class="number">0</span>:<span class="number">99999</span>:<span class="number">7</span>:::
+operator:*:<span class="number">10933</span>:<span class="number">0</span>:<span class="number">99999</span>:<span class="number">7</span>:::
+ftp:*:<span class="number">10933</span>:<span class="number">0</span>:<span class="number">99999</span>:<span class="number">7</span>:::
+nobody:*:<span class="number">10933</span>:<span class="number">0</span>:<span class="number">99999</span>:<span class="number">7</span>:::
+<span class="keyword">default</span>::<span class="number">10933</span>:<span class="number">0</span>:<span class="number">99999</span>:<span class="number">7</span>:::</code></pre>
+<p>This would be fine if we logged in via the console (or over telnet), but dropbear <em>requires</em> a password to be set if we want to SSH to the box.
+
+</p>
+<p>A crypt-based password is fine, so let&apos;s create a crypted version of the word <code>passpass</code> and set it as the root password in <code>/etc/shadow</code>:
+
+</p>
+<pre><code class="bash">CRYPTEDPASS=$(perl -e <span class="string">'print crypt("passpass","salt")'</span>)
+sed -i -e <span class="string">"s#^root:[^:]*:#root:$CRYPTEDPASS:#"</span> <span class="variable">$ROOTDIR</span>/etc/shadow</code></pre>
+<h6>Mount /boot</h6>
+<p>We want to mount <code>/dev/mmcblk0p1</code> to <code>/boot</code> on the Pi, so we create a mount point and write the necessary entry to <code>/etc/fstab</code>:
+
+</p>
+<pre><code class="bash">install -d -m <span class="number">0755</span> <span class="variable">$ROOTDIR</span>/boot
+<span class="keyword">echo</span> <span class="string">'/dev/mmcblk0p1 /boot vfat defaults 0 0'</span> >> <span class="variable">$ROOTDIR</span>/etc/fstab</code></pre>
+<h6>Copy firmware files and kernel to /boot</h6>
+<p>Mount the SD card&apos;s first partition to - let&apos;s say - <code>/mnt/rpi/boot</code> (<code>$BOOTDIR</code>), then:
+
+</p>
+<pre><code class="bash">cp <span class="variable">$TOPDIR</span>/output/images/zImage <span class="variable">$BOOTDIR</span>/kernel.img
+git <span class="keyword">clone</span> https:<span class="comment">//github.com/raspberrypi/firmware</span>
+cp firmware/boot/bootcode.bin <span class="variable">$BOOTDIR</span>
+cp firmware/boot/start.elf <span class="variable">$BOOTDIR</span>
+cp firmware/boot/fixup.dat <span class="variable">$BOOTDIR</span></code></pre>
+<p>We also need a command line for our kernel, so put the following line into <code>$BOOTDIR/cmdline.txt</code>:
+
+</p>
+<pre><code>dwc_otg.lpm_enable=0 console=ttyAMA0,115200 kgdboc=ttyAMA0,115200 console=tty1 elevator=deadline rootwait root=/dev/mmcblk0p2 rootfstype=ext4</code></pre>
+<p>This comes from Raspbian, you may vary it as you wish - here is my latest NFS root cmdline for example:
+
+</p>
+<pre><code>dwc_otg.lpm_enable=0 console=ttyAMA0,115200 kgdboc=ttyAMA0,115200 console=tty1 elevator=deadline rootwait ip=::::rpi::dhcp root=/dev/nfs nfsroot=192.168.1.1:/mnt/shares/rpifs/nfsroot,tcp,rsize=32768,wsize=32768</code></pre>
+<p>(For the syntax and semantics of the <code>ip</code> parameter see the relevant <a href="https://www.kernel.org/doc/Documentation/filesystems/nfs/nfsroot.txt">kernel docs</a>.)
+
+</p>
+<p>Now the system is ready: put the SD card into your Pi and hope for the best. :-) (But seriously, it should work.)
+
+</p>
+<p><a href="http://cellux.github.com/articles/diy-linux-with-buildroot-part-2/">Continue to part 2</a>
+
+</p>
+</section>
+        </article>
+      </div>
+      <footer>
+        <div class="inner">
+          <p>&nbsp;</p>
+        </div>
+      </footer>
+    </div>
+  </body>
+</html>
