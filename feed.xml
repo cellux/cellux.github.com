@@ -5,9 +5,1227 @@
     <atom:link href="http://cellux.github.com/feed.xml" rel="self" type="application/rss+xml"></atom:link>
     <link>http://cellux.github.com</link>
     <description>My personal adventures in the world of the Raspberry Pi</description>
-    <pubDate>Fri, 11 Jan 2013 08:27:00 +0100</pubDate>
+    <pubDate>Sat, 19 Jan 2013 20:38:00 +0100</pubDate>
     <generator>The mighty Wintersmith</generator>
     <language>en</language>
+    <item>
+      <title>Introduction to LuaJIT [1/2]</title>
+      <link>http://cellux.github.com/articles/introduction-to-luajit-part-1/</link>
+      <pubDate>Sat, 19 Jan 2013 20:38:00 +0100</pubDate>
+      <guid isPermaLink="true">http://cellux.github.com/articles/introduction-to-luajit-part-1/</guid>
+      <author></author>
+      <description>&lt;p&gt;Now that we have &lt;a href=&quot;http://cellux.github.com/articles/diy-linux-with-buildroot-part-1/&quot;&gt;our own Linux system&lt;/a&gt; to work on, we can start writing programs for the Pi.
+
+&lt;/p&gt;
+&lt;p&gt;After much investigation, I decided to write these programs in &lt;a href=&quot;http://www.lua.org/&quot;&gt;Lua&lt;/a&gt; - more exactly &lt;a href=&quot;http://www.luajit.org/&quot;&gt;LuaJIT&lt;/a&gt;, a highly optimized implementation of the original Lua 5.1 VM developed by a single person, Mike Pall, who - based on his work - seems to be nothing short of a genius. This guy implemented a just-in-time compiler for Lua which can compile Lua bytecode straight into optimized machine code on the x86/x64, PPC, MIPS &lt;em&gt;and ARM&lt;/em&gt; architectures. Furthermore, he added an excellent foreign function interface which makes it a breeze to interface Lua code with C libraries.
+
+&lt;/p&gt;
+&lt;p&gt;As LuaJIT is already included in the Buildroot distribution, it takes just the flip of a switch to install it into our root fs (see my &lt;a href=&quot;http://cellux.github.com/articles/diy-linux-with-buildroot-part-1/&quot;&gt;Buildroot article&lt;/a&gt; for details). There is one catch though: Buildroot 2012.11.1 contains a late beta version of LuaJIT, not the final 2.0.0. If you want the final version, you should clone the &lt;a href=&quot;git://git.buildroot.net/buildroot&quot;&gt;Buildroot GitHub repository&lt;/a&gt; and replace the &lt;code&gt;buildroot-2012.11.1/package/luajit&lt;/code&gt; folder with the version from the master branch before running &lt;code&gt;make&lt;/code&gt;.
+
+&lt;/p&gt;
+&lt;p&gt;The LuaJIT package installs the following files to the root fs:
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;/usr/bin/luajit
+/usr/lib/libluajit-5.1.so
+/usr/share/luajit-2.0.0/jit/bc.lua
+/usr/share/luajit-2.0.0/jit/bcsave.lua
+/usr/share/luajit-2.0.0/jit/dis_arm.lua
+/usr/share/luajit-2.0.0/jit/dis_mipsel.lua
+/usr/share/luajit-2.0.0/jit/dis_mips.lua
+/usr/share/luajit-2.0.0/jit/dis_ppc.lua
+/usr/share/luajit-2.0.0/jit/dis_x64.lua
+/usr/share/luajit-2.0.0/jit/dis_x86.lua
+/usr/share/luajit-2.0.0/jit/dump.lua
+/usr/share/luajit-2.0.0/jit/v.lua
+/usr/share/luajit-2.0.0/jit/vmdef.lua&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;From these, &lt;code&gt;libluajit-5.1.so&lt;/code&gt; plays the central role: this ~500kb library contains the complete Lua interpreter, compiler, standard library and foreign function interface. If we had the necessary header files, we could use this library from C like this:
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;C&quot;&gt;&lt;span class=&quot;comment&quot;&gt;#include &lt;stdio.h&gt;&lt;/span&gt;
+&lt;span class=&quot;comment&quot;&gt;#include &lt;luajit-2.0/lua.h&gt;&lt;/span&gt;
+&lt;span class=&quot;comment&quot;&gt;#include &lt;luajit-2.0/lauxlib.h&gt;&lt;/span&gt;
+
+int main (int argc, char **argv) {
+  &lt;span class=&quot;keyword&quot;&gt;if&lt;/span&gt; (argc &gt; &lt;span class=&quot;number&quot;&gt;1&lt;/span&gt;) {
+    lua_State *L = luaL_newstate();
+    luaL_openlibs(L);
+    luaL_dostring(L, argv[&lt;span class=&quot;number&quot;&gt;1&lt;/span&gt;]);
+    lua_close(L);
+  }
+  &lt;span class=&quot;keyword&quot;&gt;else&lt;/span&gt; {
+    fprintf(stderr, &lt;span class=&quot;string&quot;&gt;&quot;Usage: %s [lua-code]\n&quot;&lt;/span&gt;, argv[&lt;span class=&quot;number&quot;&gt;0&lt;/span&gt;]);
+  }
+}&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;code&gt;luaL_newstate&lt;/code&gt; creates a new Lua VM instance, &lt;code&gt;luaL_openlibs&lt;/code&gt; makes the standard library available to code running in this VM, &lt;code&gt;luaL_dostring&lt;/code&gt; compiles the program given in its second parameter (a C string) to Lua bytecode - probably machine code in the case of LuaJIT! - and then executes it. &lt;code&gt;lua_close&lt;/code&gt; destroys the VM instance and takes care of cleanup.
+
+&lt;/p&gt;
+&lt;p&gt;Variables defined in Lua may be accessed from C through an easy-to-use API. The programmer can also make C functions and data structures available in Lua. A frequently used pattern is to separate the codebase into two parts: a C/C++ part provides a set of low-level components (like objects of a 3D engine), while the Lua part glues these components together into the desired app.
+
+&lt;/p&gt;
+&lt;p&gt;The application&apos;s startup code may look like this:
+
+&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;Load and initialize low-level C/C++ components, bind them into the Lua VM&lt;/li&gt;
+&lt;li&gt;Load and execute a &lt;code&gt;main()&lt;/code&gt; function implemented in Lua&lt;/li&gt;
+&lt;/ol&gt;
+&lt;p&gt;In sophisticated systems, the Lua side may open a network socket and listen for connections from the developer. Through this socket the programmer can send in Lua code which is instantly compiled and executed in the context of the running app. Functions of the app thus may be replaced in real-time - while the app is running - which provides a great environment for experimentation.
+
+&lt;/p&gt;
+&lt;p&gt;The &lt;code&gt;/usr/bin/luajit&lt;/code&gt; binary is a simple C frontend to &lt;code&gt;libluajit-5.1.so&lt;/code&gt;: it provides a REPL (read-eval-print loop) and can also run a Lua script file if we pass one as an argument.
+
+&lt;/p&gt;
+&lt;p&gt;The files under &lt;code&gt;/usr/share/luajit-2.0.0/jit&lt;/code&gt; are part of LuaJIT&apos;s &lt;code&gt;jit&lt;/code&gt; library, which provides a Lua API to the JIT compiler. Through this lib we can control the JIT, disassemble Lua bytecode (and the machine code generated from it) or get a human-readable dump of the code in its various stages as it progresses through the JIT compiler.
+
+&lt;/p&gt;
+&lt;h5&gt;A tour of the language&lt;/h5&gt;
+&lt;p&gt;In the rest of this article I will attempt to give a concise introduction to Lua. For further details - and a description of the C API which I won&apos;t discuss here -, I highly recommend reading the &lt;a href=&quot;http://www.lua.org/manual/5.1/manual.html&quot;&gt;Lua 5.1 manual&lt;/a&gt; (a work of art in itself - on par with the &lt;a href=&quot;http://schemers.org/Documents/Standards/R5RS/&quot;&gt;R5RS standard&lt;/a&gt; if you know what I mean).
+
+&lt;/p&gt;
+&lt;p&gt;Lua is a &quot;polyglot&quot; language: you can write Lua programs in procedural, object oriented or functional style - most likely mixing and matching these approaches as you go. It has all the usual control structures: &lt;em&gt;if..then..elseif..end&lt;/em&gt;, &lt;em&gt;while..do..end&lt;/em&gt;, &lt;em&gt;repeat..until&lt;/em&gt; and two variants of the &lt;em&gt;for&lt;/em&gt; loop. It has &lt;em&gt;booleans&lt;/em&gt; - &lt;code&gt;true&lt;/code&gt; and &lt;code&gt;false&lt;/code&gt;, &lt;em&gt;numbers&lt;/em&gt; - which correspond to C doubles, &lt;em&gt;strings&lt;/em&gt; - 8-bit clean, counted byte arrays and &lt;em&gt;tables&lt;/em&gt; - used to implement arrays, maps, records, trees, objects and modules. There is also the special value &lt;em&gt;nil&lt;/em&gt; - a singleton value serving the same role as &lt;em&gt;None&lt;/em&gt; in Python or &lt;em&gt;NULL&lt;/em&gt; in Java (meaning &quot;no value&quot;).
+
+&lt;/p&gt;
+&lt;p&gt;&lt;em&gt;Functions&lt;/em&gt; in Lua are first-class values: they can be created with literals, stored in variables and passed to functions as arguments. &lt;em&gt;Threads&lt;/em&gt; (aka coroutines) allow several independent threads of execution inside a single Lua VM. These are not OS-level threads: there is no built-in scheduler to pre-empt them, so from time to time they must voluntarily give up control using the &lt;code&gt;coroutine.yield()&lt;/code&gt; function. (The same model was used in &lt;a href=&quot;http://en.wikipedia.org/wiki/Scheduling_%28computing%29#Windows&quot;&gt;Windows 3.1&lt;/a&gt; to implement multitasking.)
+
+&lt;/p&gt;
+&lt;p&gt;The last two types - &lt;em&gt;userdata&lt;/em&gt; and &lt;em&gt;lightuserdata&lt;/em&gt; - are used to represent C data structures and plain pointers on the Lua side.
+
+&lt;/p&gt;
+&lt;p&gt;Lua has the four standard arithmetic operators (&lt;code&gt;+&lt;/code&gt;, &lt;code&gt;-&lt;/code&gt;, &lt;code&gt;*&lt;/code&gt;, &lt;code&gt;/&lt;/code&gt;), a modulo operator (&lt;code&gt;%&lt;/code&gt;), exponentiation (&lt;code&gt;^&lt;/code&gt;) and a prefix &quot;length-of&quot; operator (&lt;code&gt;#&lt;/code&gt;). Comparison can be done using &lt;code&gt;==&lt;/code&gt;, &lt;code&gt;&lt;&lt;/code&gt;, &lt;code&gt;&gt;&lt;/code&gt;, &lt;code&gt;&lt;=&lt;/code&gt; and &lt;code&gt;&gt;=&lt;/code&gt;. The &quot;not-equal&quot; operator is &lt;code&gt;~=&lt;/code&gt; (not &lt;span style=&quot;font-family: monospace&quot;&gt;!=&lt;/span&gt;). Booleans and numbers are compared by value. Tables, functions, threads and userdata are considered equal if they reference the same object on the Lua heap. Strings are special: they are interned in a string table (a hash map) which &lt;a href=&quot;http://www.lua.org/source/5.1/lstring.c.html#luaS_newlstr&quot;&gt;guarantees&lt;/a&gt; that any given string encountered during execution gets stored in memory only once. This means that after
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;Lua&quot;&gt;a = &quot;hello, world&quot;
+b = &quot;hello, world&quot;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;both &lt;code&gt;a&lt;/code&gt; and &lt;code&gt;b&lt;/code&gt; reference the same string value. Comparison of two strings thus boils down to a &lt;a href=&quot;http://www.lua.org/source/5.1/lvm.c.html#luaV_equalval&quot;&gt;simple pointer comparison&lt;/a&gt;. As a result, we can use strings for the same purpose we would use enums in C or C++ without causing speed loss or significant memory bloat.
+
+&lt;/p&gt;
+&lt;p&gt;In the following sections I will illustrate various areas (and idioms) of the language using small code snippets mostly originating from Steve Donovan&apos;s &lt;a href=&quot;http://github.com/stevedonovan/Penlight/&quot;&gt;Penlight&lt;/a&gt;, a comprehensive library of Lua utility functions. The code has been simplified a bit: I removed error handling and any extra features which would decrease the clarity - and therefore education value - of the examples.
+
+&lt;/p&gt;
+&lt;p&gt;Let&apos;s start with a simple function which converts its single numeric argument to a string, with thousands separated by commas (&lt;code&gt;12345678&lt;/code&gt; =&gt; &lt;code&gt;&quot;12,345,678&quot;&lt;/code&gt;):
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;Lua&quot;&gt;&lt;span class=&quot;keyword&quot;&gt;function&lt;/span&gt; comma(val)
+   local thou = math.floor(val/&lt;span class=&quot;number&quot;&gt;1000&lt;/span&gt;)
+   &lt;span class=&quot;keyword&quot;&gt;if&lt;/span&gt; thou &gt; &lt;span class=&quot;number&quot;&gt;0&lt;/span&gt; then &lt;span class=&quot;keyword&quot;&gt;return&lt;/span&gt; comma(thou)..&lt;span class=&quot;string&quot;&gt;','&lt;/span&gt;..string.format(&lt;span class=&quot;string&quot;&gt;'%03d'&lt;/span&gt;, val % &lt;span class=&quot;number&quot;&gt;1000&lt;/span&gt;)
+   &lt;span class=&quot;keyword&quot;&gt;else&lt;/span&gt; &lt;span class=&quot;keyword&quot;&gt;return&lt;/span&gt; tostring(val) end
+end&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;The first line of the function declares the local variable &lt;code&gt;thou&lt;/code&gt;. Local variables can be only accessed inside the lexical scope that defined them - in this case the body of the function. We initialize &lt;code&gt;thou&lt;/code&gt; with the value of &lt;code&gt;math.floor(val/1000)&lt;/code&gt;, using the &lt;code&gt;floor&lt;/code&gt; function from the built-in &lt;code&gt;math&lt;/code&gt; module. If &lt;code&gt;math.floor(val/1000)&lt;/code&gt; is positive, then the original &lt;code&gt;val&lt;/code&gt; was greater than 1000, therefore we&apos;ll need a comma before the last three digits. Here the function goes recursive: it calls itself to return a properly comma-separated string representation of &lt;code&gt;math.floor(val/1000)&lt;/code&gt;, then concatenates a comma and the last three digits to the result (&lt;code&gt;..&lt;/code&gt; is the string concatenation operator, &lt;code&gt;%&lt;/code&gt; is modulo, &lt;code&gt;string.format&lt;/code&gt; works like &lt;code&gt;printf&lt;/code&gt; in C). If the &lt;code&gt;val&lt;/code&gt; we got was less than 1000, then we just return &lt;code&gt;val&lt;/code&gt; converted to a string.
+
+&lt;/p&gt;
+&lt;p&gt;(Note: the &lt;code&gt;tostring&lt;/code&gt; function has its brother &lt;code&gt;tonumber&lt;/code&gt; which can be used to convert a string to a number.)
+
+&lt;/p&gt;
+&lt;p&gt;Let&apos;s see a slightly more complicated example, a function which expands tab characters to spaces in a string:
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;Lua&quot;&gt;&lt;span class=&quot;keyword&quot;&gt;function&lt;/span&gt; expand_tabs(s,n)
+   n = n &lt;span class=&quot;keyword&quot;&gt;or&lt;/span&gt; &lt;span class=&quot;number&quot;&gt;8&lt;/span&gt;
+   &lt;span class=&quot;keyword&quot;&gt;return&lt;/span&gt; s:gsub(&lt;span class=&quot;string&quot;&gt;'([^\t]*)\t'&lt;/span&gt;,
+                 &lt;span class=&quot;keyword&quot;&gt;function&lt;/span&gt;(s)
+                    &lt;span class=&quot;keyword&quot;&gt;return&lt;/span&gt; s..(&lt;span class=&quot;string&quot;&gt;' '&lt;/span&gt;):rep(n - &lt;span class=&quot;comment&quot;&gt;#s % n)&lt;/span&gt;
+                 end)
+end&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;The first argument of expand_tabs (&lt;code&gt;s&lt;/code&gt;) is the string with the tabs in it, the second arg (&lt;code&gt;n&lt;/code&gt;) specifies the width of one tab in character units.
+
+&lt;/p&gt;
+&lt;p&gt;The &lt;code&gt;n = n or 8&lt;/code&gt; idiom takes advantage of the short-circuiting nature of Lua&apos;s &lt;code&gt;or&lt;/code&gt; operator: if the value of &lt;code&gt;n&lt;/code&gt; is logically true - which in Lua means it is neither &lt;code&gt;nil&lt;/code&gt; nor &lt;code&gt;false&lt;/code&gt; - then the value of &lt;code&gt;n&lt;/code&gt; stays as it is, otherwise it&apos;s replaced by eight. This idiom is widely used to assign default values to function arguments.
+
+&lt;/p&gt;
+&lt;p&gt;The &lt;code&gt;s:gsub()&lt;/code&gt; invocation calls a &lt;em&gt;method&lt;/em&gt; on string object &lt;code&gt;s&lt;/code&gt; - the exact meaning of this will be revealed later. The &lt;code&gt;gsub&lt;/code&gt; method searches the string for the pattern given in the first argument (&lt;code&gt;([^\t]*)\t&lt;/code&gt;), calls the function passed as the second arg for every match it finds and substitutes the match with the function&apos;s result. If the search pattern contains parenthesized subpatterns (captures), then the function is called with a list of the corresponding matches (as separate arguments), otherwise the entire match gets passed (in a single argument).
+
+&lt;/p&gt;
+&lt;p&gt;This particular &lt;code&gt;gsub&lt;/code&gt; invocation looks for groups of non-tab characters followed by a single tab, and replaces every match with the group of non-tab characters (unchanged) plus the right amount of spaces for the last tab. As &lt;code&gt;#s&lt;/code&gt; returns the length of the string (the group of non-tab chars), &lt;code&gt;n - #s % n&lt;/code&gt; gives the number of spaces which must be appended to make up for a single tab.
+
+&lt;/p&gt;
+&lt;p&gt;The &lt;code&gt;(&apos; &apos;):rep()&lt;/code&gt; call invokes the &lt;code&gt;rep(n)&lt;/code&gt; string method which returns the string repeated &lt;code&gt;n&lt;/code&gt; times.
+
+&lt;/p&gt;
+&lt;p&gt;Strings in Lua may contain the following embedded escape sequences:
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;Lua&quot;&gt;\a bell
+\b backspace
+\f form feed
+\n newline
+\r carriage return
+\t horizontal tab
+\v vertical tab
+\\ backslash
+\&quot; quotation mark [double quote]
+\' apostrophe [single quote]&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;It doesn&apos;t matter if a string is enclosed in single (&lt;code&gt;&apos;&lt;/code&gt;) or double (&lt;code&gt;&quot;&lt;/code&gt;) quotes, the semantics are the same.
+
+&lt;/p&gt;
+&lt;p&gt;If you want to include a character with any byte value between 0-255, use &lt;code&gt;\nnn&lt;/code&gt; where &lt;code&gt;nnn&lt;/code&gt; is the byte value in decimal:
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;Lua&quot;&gt;assert(&quot;\a\b\f\n\r\t\v\\\&quot;\'&quot; == &quot;\007\008\012\010\013\009\011\092\034\039&quot;)&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Embedded zeroes are ok.
+
+&lt;/p&gt;
+&lt;p&gt;(&lt;code&gt;assert&lt;/code&gt; checks that its argument evaluates to true and throws an error if it doesn&apos;t.)
+
+&lt;/p&gt;
+&lt;h6&gt;Logical operators&lt;/h6&gt;
+&lt;p&gt;Lua has three logical operators: &lt;code&gt;or&lt;/code&gt;, &lt;code&gt;and&lt;/code&gt; and &lt;code&gt;not&lt;/code&gt;.
+
+&lt;/p&gt;
+&lt;p&gt;Their precedence order: &lt;code&gt;not&lt;/code&gt; &gt; &lt;code&gt;and&lt;/code&gt; &gt; &lt;code&gt;or&lt;/code&gt;.
+
+&lt;/p&gt;
+&lt;p&gt;Both &lt;code&gt;and&lt;/code&gt; and &lt;code&gt;or&lt;/code&gt; have short-circuiting behavior.
+
+&lt;/p&gt;
+&lt;p&gt;The following examples illustrate their use:
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;Lua&quot;&gt;so_ext = os == &lt;span class=&quot;string&quot;&gt;&quot;Windows&quot;&lt;/span&gt; &lt;span class=&quot;keyword&quot;&gt;and&lt;/span&gt; &lt;span class=&quot;string&quot;&gt;'dll'&lt;/span&gt; &lt;span class=&quot;keyword&quot;&gt;or&lt;/span&gt; &lt;span class=&quot;string&quot;&gt;'so'&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;This example checks whether &lt;code&gt;os&lt;/code&gt; equals the string &lt;code&gt;&quot;Windows&quot;&lt;/code&gt;, if it does, the value of &lt;code&gt;so_ext&lt;/code&gt; will be &lt;code&gt;&apos;dll&apos;&lt;/code&gt;, otherwise, it will be &lt;code&gt;&apos;so&apos;&lt;/code&gt;. The &lt;code&gt;&apos;so&apos;&lt;/code&gt; part will be evaluated only if the &lt;code&gt;os == &quot;Windows&quot; and &apos;dll&apos;&lt;/code&gt; part evaluates to false - which is only possible if &lt;code&gt;os&lt;/code&gt; was not &lt;code&gt;&quot;Windows&quot;&lt;/code&gt;.
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;Lua&quot;&gt;year = Y + (Y &lt; &lt;span class=&quot;number&quot;&gt;35&lt;/span&gt; &lt;span class=&quot;keyword&quot;&gt;and&lt;/span&gt; &lt;span class=&quot;number&quot;&gt;2000&lt;/span&gt; &lt;span class=&quot;keyword&quot;&gt;or&lt;/span&gt; &lt;span class=&quot;number&quot;&gt;1900&lt;/span&gt;)&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;This line might be familiar to any maintenance programmer who spent the last years of the twentieth century removing Y2K bugs.
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;Lua&quot;&gt;step = finish &gt; start &lt;span class=&quot;keyword&quot;&gt;and&lt;/span&gt; &lt;span class=&quot;number&quot;&gt;1&lt;/span&gt; &lt;span class=&quot;keyword&quot;&gt;or&lt;/span&gt; -&lt;span class=&quot;number&quot;&gt;1&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;A way to decide whether we should increment or decrement our index variable in the upcoming loop if we want to get from &lt;code&gt;start&lt;/code&gt; to &lt;code&gt;finish&lt;/code&gt;.
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;Lua&quot;&gt;&lt;span class=&quot;keyword&quot;&gt;if&lt;/span&gt; not year &lt;span class=&quot;keyword&quot;&gt;and&lt;/span&gt; not month &lt;span class=&quot;keyword&quot;&gt;and&lt;/span&gt; not day then
+   error &lt;span class=&quot;string&quot;&gt;&quot;at least the year, the month or the day must be specified&quot;&lt;/span&gt;
+end&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;code&gt;error&lt;/code&gt; is the way to signal an error in Lua. This is similar to &lt;em&gt;throw&lt;/em&gt; in other languages. The error that is thrown (which may be any object, not just a string) can be caught using &lt;code&gt;pcall&lt;/code&gt; (protected call):
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;Lua&quot;&gt;&lt;span class=&quot;keyword&quot;&gt;function&lt;/span&gt; main(arg1,arg2,arg3)
+  &lt;span class=&quot;keyword&quot;&gt;if&lt;/span&gt; arg1 &gt; &lt;span class=&quot;number&quot;&gt;5&lt;/span&gt; then
+    error(&lt;span class=&quot;string&quot;&gt;&quot;no&quot;&lt;/span&gt;)
+  &lt;span class=&quot;keyword&quot;&gt;else&lt;/span&gt;
+    &lt;span class=&quot;keyword&quot;&gt;return&lt;/span&gt; arg3,arg2,arg1
+  end
+end
+
+status,res1,res2,res3 = pcall(main,&lt;span class=&quot;number&quot;&gt;1&lt;/span&gt;,&lt;span class=&quot;number&quot;&gt;2&lt;/span&gt;,&lt;span class=&quot;number&quot;&gt;3&lt;/span&gt;)
+assert(status==&lt;span class=&quot;keyword&quot;&gt;true&lt;/span&gt;)
+assert(res1==&lt;span class=&quot;number&quot;&gt;3&lt;/span&gt;)
+assert(res2==&lt;span class=&quot;number&quot;&gt;2&lt;/span&gt;)
+assert(res3==&lt;span class=&quot;number&quot;&gt;1&lt;/span&gt;)
+
+status,res1,res2,res3 = pcall(main,&lt;span class=&quot;number&quot;&gt;9&lt;/span&gt;,&lt;span class=&quot;number&quot;&gt;8&lt;/span&gt;,&lt;span class=&quot;number&quot;&gt;7&lt;/span&gt;)
+assert(status==&lt;span class=&quot;keyword&quot;&gt;false&lt;/span&gt;)
+assert(type(res1)==&lt;span class=&quot;string&quot;&gt;&quot;string&quot;&lt;/span&gt;)
+assert(res2==nil)
+assert(res3==nil)&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;If the protected function (&lt;code&gt;main&lt;/code&gt; in this case) didn&apos;t call &lt;code&gt;error&lt;/code&gt; anywhere in its call graph, &lt;code&gt;pcall&lt;/code&gt; returns with a &lt;code&gt;true&lt;/code&gt; status plus the values returned by the function. (Here you can see how functions can return multiple values in Lua.)
+
+&lt;/p&gt;
+&lt;p&gt;In the other case, &lt;code&gt;pcall&lt;/code&gt; returns &lt;code&gt;false&lt;/code&gt; and the error message (or object) which was thrown. As there are only two results, &lt;code&gt;res2&lt;/code&gt; and &lt;code&gt;res3&lt;/code&gt; are set to &lt;code&gt;nil&lt;/code&gt;.
+
+&lt;/p&gt;
+&lt;p&gt;The &lt;code&gt;type&lt;/code&gt; function returns the type of its argument as a string.
+
+&lt;/p&gt;
+&lt;p&gt;You may wonder why I used parentheses around &lt;code&gt;error&lt;/code&gt;&apos;s argument in one case, and no parentheses in the other: in Lua, you are free to leave out the parentheses if you call a function with a single argument which is either a &lt;em&gt;string&lt;/em&gt; or a &lt;em&gt;table constructor&lt;/em&gt;.
+
+&lt;/p&gt;
+&lt;h6&gt;Tables&lt;/h6&gt;
+&lt;p&gt;Tables are associative arrays mapping unique keys to values. Both keys and values may be of an arbitrary type (but not &lt;code&gt;nil&lt;/code&gt;).
+
+&lt;/p&gt;
+&lt;p&gt;Tables are created with a table constructor:
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;Lua&quot;&gt;months = {jan=1,feb=2,mar=3,apr=4,may=5,jun=6,jul=7,aug=8,sep=9,oct=10,nov=11,dec=12}&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;This table can be used to map abbreviated month names to month numbers:
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;Lua&quot;&gt;assert(months[&quot;jan&quot;]==1)
+assert(months[&quot;oct&quot;]==10)&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;For keys which are valid Lua identifiers - meaning a string of letters, digits, and underscores not beginning with a digit - the following notation is also accepted:
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;Lua&quot;&gt;assert(months.jan==1)
+assert(months.oct==10)&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Here is a function which converts accented characters in a string to their non-accented counterparts:
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;Lua&quot;&gt;local accent_maps = {
+   hu = {
+     [&lt;span class=&quot;string&quot;&gt;'á'&lt;/span&gt;] = &lt;span class=&quot;string&quot;&gt;'a'&lt;/span&gt;,
+     [&lt;span class=&quot;string&quot;&gt;'é'&lt;/span&gt;] = &lt;span class=&quot;string&quot;&gt;'e'&lt;/span&gt;,
+     [&lt;span class=&quot;string&quot;&gt;'í'&lt;/span&gt;] = &lt;span class=&quot;string&quot;&gt;'i'&lt;/span&gt;,
+     [&lt;span class=&quot;string&quot;&gt;'ó'&lt;/span&gt;] = &lt;span class=&quot;string&quot;&gt;'o'&lt;/span&gt;,
+     [&lt;span class=&quot;string&quot;&gt;'ú'&lt;/span&gt;] = &lt;span class=&quot;string&quot;&gt;'u'&lt;/span&gt;,
+     [&lt;span class=&quot;string&quot;&gt;'ö'&lt;/span&gt;] = &lt;span class=&quot;string&quot;&gt;'o'&lt;/span&gt;,
+     [&lt;span class=&quot;string&quot;&gt;'ü'&lt;/span&gt;] = &lt;span class=&quot;string&quot;&gt;'u'&lt;/span&gt;,
+     [&lt;span class=&quot;string&quot;&gt;'ő'&lt;/span&gt;] = &lt;span class=&quot;string&quot;&gt;'o'&lt;/span&gt;,
+     [&lt;span class=&quot;string&quot;&gt;'ű'&lt;/span&gt;] = &lt;span class=&quot;string&quot;&gt;'u'&lt;/span&gt;,
+   },
+}
+
+&lt;span class=&quot;keyword&quot;&gt;function&lt;/span&gt; remove_accents(s,lang)
+   &lt;span class=&quot;keyword&quot;&gt;for&lt;/span&gt; from,to in pairs(accent_maps[lang]) &lt;span class=&quot;keyword&quot;&gt;do&lt;/span&gt;
+      s = s:gsub(from,to)
+   end
+   &lt;span class=&quot;keyword&quot;&gt;return&lt;/span&gt; s
+end
+
+assert(remove_accents(&lt;span class=&quot;string&quot;&gt;&quot;árvíztűrő tükörfúrógép&quot;&lt;/span&gt;,&lt;span class=&quot;string&quot;&gt;'hu'&lt;/span&gt;)==&lt;span class=&quot;string&quot;&gt;&quot;arvizturo tukorfurogep&quot;&lt;/span&gt;)&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;The function is not particularly efficient, but it works. It uses a &lt;code&gt;for..in&lt;/code&gt; loop to iterate over the key-value pairs in a particular accent map (identified by &lt;code&gt;accent_maps[lang]&lt;/code&gt;) and substitutes one kind of accented character on each iteration of the loop. The code assumes that the strings we process and the string literals in the code are encoded with the same character encoding. Lua doesn&apos;t know anything about accented characters: the keys in the &lt;code&gt;accent_maps.hu&lt;/code&gt; table are seen as simple byte strings.
+
+&lt;/p&gt;
+&lt;p&gt;As you probably noticed from the code, the list of items in a table constructor may end with a single comma - this feature helps us avoid a common error we get in other, more strict languages when we try to add new elements to a table - or change the order of elements - but forget to tidy up the separating commas.
+
+&lt;/p&gt;
+&lt;p&gt;The &lt;code&gt;gsub&lt;/code&gt; method is used in a slightly different manner than previously: if its second arg is a string, &lt;code&gt;gsub&lt;/code&gt; uses that directly as the replacement value.
+
+&lt;/p&gt;
+&lt;h6&gt;Arrays&lt;/h6&gt;
+&lt;p&gt;In Lua, traditional arrays (with integer indices) are also implemented with tables:
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;Lua&quot;&gt;arr = { 1,5,10,20 }&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;This table constructor is short-hand for the following, more verbose one:
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;Lua&quot;&gt;arr = { [1]=1,[2]=5,[3]=10,[4]=20 }&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;In other words, if we list a value without a key, it gets an auto-incremented index starting from 1:
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;Lua&quot;&gt;arr = { &lt;span class=&quot;number&quot;&gt;1&lt;/span&gt;,&lt;span class=&quot;number&quot;&gt;2&lt;/span&gt;,fire=&lt;span class=&quot;string&quot;&gt;&quot;water&quot;&lt;/span&gt;,&lt;span class=&quot;string&quot;&gt;&quot;leaves&quot;&lt;/span&gt;,[&lt;span class=&quot;number&quot;&gt;1&lt;/span&gt;]=&lt;span class=&quot;number&quot;&gt;8&lt;/span&gt;,nil,&lt;span class=&quot;keyword&quot;&gt;function&lt;/span&gt;() &lt;span class=&quot;keyword&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;number&quot;&gt;42&lt;/span&gt; end }
+assert(arr[&lt;span class=&quot;number&quot;&gt;1&lt;/span&gt;]==&lt;span class=&quot;number&quot;&gt;8&lt;/span&gt;)
+assert(arr[&lt;span class=&quot;number&quot;&gt;2&lt;/span&gt;]==&lt;span class=&quot;number&quot;&gt;2&lt;/span&gt;)
+assert(arr.fire==&lt;span class=&quot;string&quot;&gt;&quot;water&quot;&lt;/span&gt;)
+assert(arr[&lt;span class=&quot;number&quot;&gt;3&lt;/span&gt;]==&lt;span class=&quot;string&quot;&gt;&quot;leaves&quot;&lt;/span&gt;)
+assert(arr[&lt;span class=&quot;number&quot;&gt;4&lt;/span&gt;]==nil)
+assert(type(arr[&lt;span class=&quot;number&quot;&gt;5&lt;/span&gt;])==&lt;span class=&quot;string&quot;&gt;&quot;function&quot;&lt;/span&gt;)
+assert(arr[&lt;span class=&quot;number&quot;&gt;5&lt;/span&gt;]()==&lt;span class=&quot;number&quot;&gt;42&lt;/span&gt;)&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;As the example shows, an element which belongs to an already assigned index (&lt;code&gt;1&lt;/code&gt;) may be later overwritten by explicit specification of the same integer key (&lt;code&gt;[1]=8&lt;/code&gt;).
+
+&lt;/p&gt;
+&lt;p&gt;Internally, table elements indexed by integers are kept separately (in an &lt;em&gt;array part&lt;/em&gt;) from elements indexed by other types (the &lt;em&gt;hash part&lt;/em&gt;). This ensures optimal efficiency for both use cases.
+
+&lt;/p&gt;
+&lt;h6&gt;Control structures: the for..in loop&lt;/h6&gt;
+&lt;p&gt;The &lt;code&gt;for..in&lt;/code&gt; loop can be used to iterate over a series of values provided by an &lt;em&gt;iterator function&lt;/em&gt; (the semantics will be explained later).
+
+&lt;/p&gt;
+&lt;p&gt;It&apos;s typically used like this:
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;Lua&quot;&gt;&lt;span class=&quot;keyword&quot;&gt;for&lt;/span&gt; &lt;var1&gt;,&lt;var2&gt;,... in &lt;iterator&gt; &lt;span class=&quot;keyword&quot;&gt;do&lt;/span&gt;
+  &lt;block&gt;
+end&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;On each pass of the loop, &lt;code&gt;&lt;iterator&gt;&lt;/code&gt; returns a fixed number of values which get assigned to the &lt;code&gt;&lt;var1&gt;&lt;/code&gt;, &lt;code&gt;&lt;var2&gt;&lt;/code&gt;, ... local variables visible inside &lt;code&gt;&lt;block&gt;&lt;/code&gt;.
+
+&lt;/p&gt;
+&lt;p&gt;A common use case is iteration over the key-value pairs of a table:
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;Lua&quot;&gt;&lt;span class=&quot;keyword&quot;&gt;function&lt;/span&gt; table_copy(t)
+   local res = {}
+   &lt;span class=&quot;keyword&quot;&gt;for&lt;/span&gt; k,v in pairs(t) &lt;span class=&quot;keyword&quot;&gt;do&lt;/span&gt;
+      res[k] = v
+   end
+   &lt;span class=&quot;keyword&quot;&gt;return&lt;/span&gt; res
+end&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;The iterator created by &lt;code&gt;pairs(t)&lt;/code&gt; returns two values on each iteration: the key and value of the next element in &lt;code&gt;t&lt;/code&gt;.
+
+&lt;/p&gt;
+&lt;p&gt;Here is a function to count the number of elements:
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;Lua&quot;&gt;&lt;span class=&quot;keyword&quot;&gt;function&lt;/span&gt; table_size(t)
+   local i = &lt;span class=&quot;number&quot;&gt;0&lt;/span&gt;
+   &lt;span class=&quot;keyword&quot;&gt;for&lt;/span&gt; k in pairs(t) &lt;span class=&quot;keyword&quot;&gt;do&lt;/span&gt; i = i + &lt;span class=&quot;number&quot;&gt;1&lt;/span&gt; end
+   &lt;span class=&quot;keyword&quot;&gt;return&lt;/span&gt; i
+end&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;As you see, you don&apos;t have to take all values provided by the iterator: here we only take the key. (This is generally true: if you call a function which returns N values but you assign less than N variables on the calling side, the rest of the values are silently dropped. On the contrary, if you assign more values than returned from the function, the remaining variables will be set to &lt;code&gt;nil&lt;/code&gt;.)
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;Lua&quot;&gt;&lt;span class=&quot;keyword&quot;&gt;function&lt;/span&gt; table_foreach(t,fun)
+   &lt;span class=&quot;keyword&quot;&gt;for&lt;/span&gt; k,v in pairs(t) &lt;span class=&quot;keyword&quot;&gt;do&lt;/span&gt;
+      fun(k,v)
+   end
+end&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Here we take the function &lt;code&gt;fun&lt;/code&gt; and apply it to each key-value pair in the table.
+
+&lt;/p&gt;
+&lt;p&gt;Let&apos;s see how we could write a function which gets an array of daily maximum temperatures, a limit, and prints the first day when the daily temperature exceeded the limit.
+
+&lt;/p&gt;
+&lt;p&gt;First we define a table with the temperatures and print it out using &lt;code&gt;table_foreach&lt;/code&gt;:
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;Lua&quot;&gt;daily_max_temperatures = {&lt;span class=&quot;number&quot;&gt;30&lt;/span&gt;, &lt;span class=&quot;number&quot;&gt;35&lt;/span&gt;, &lt;span class=&quot;number&quot;&gt;32&lt;/span&gt;, &lt;span class=&quot;number&quot;&gt;34&lt;/span&gt;, &lt;span class=&quot;number&quot;&gt;38&lt;/span&gt;};
+
+table_foreach(daily_max_temperatures,
+  &lt;span class=&quot;keyword&quot;&gt;function&lt;/span&gt;(day,temp)
+    &lt;span class=&quot;keyword&quot;&gt;print&lt;/span&gt;(string.format(&lt;span class=&quot;string&quot;&gt;&quot;the temperature on day #%d was %d degrees&quot;&lt;/span&gt;, day, temp))
+  end)&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;The result:
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;the temperature on day &lt;span class=&quot;comment&quot;&gt;#1 was 30 degrees&lt;/span&gt;
+the temperature on day &lt;span class=&quot;comment&quot;&gt;#2 was 35 degrees&lt;/span&gt;
+the temperature on day &lt;span class=&quot;comment&quot;&gt;#3 was 32 degrees&lt;/span&gt;
+the temperature on day &lt;span class=&quot;comment&quot;&gt;#4 was 34 degrees&lt;/span&gt;
+the temperature on day &lt;span class=&quot;comment&quot;&gt;#5 was 38 degrees&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Now let&apos;s build a function which takes a table &lt;code&gt;t&lt;/code&gt; and a function &lt;code&gt;pred&lt;/code&gt;, then finds the first value &lt;code&gt;v&lt;/code&gt; in table &lt;code&gt;t&lt;/code&gt; for which &lt;code&gt;pred(v)&lt;/code&gt; returns a logically true value (neither &lt;code&gt;nil&lt;/code&gt; nor &lt;code&gt;false&lt;/code&gt;):
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;Lua&quot;&gt;&lt;span class=&quot;keyword&quot;&gt;function&lt;/span&gt; table_find_if(t,pred)
+   &lt;span class=&quot;keyword&quot;&gt;for&lt;/span&gt; k,v in pairs(t) &lt;span class=&quot;keyword&quot;&gt;do&lt;/span&gt;
+      &lt;span class=&quot;keyword&quot;&gt;if&lt;/span&gt; pred(v) then &lt;span class=&quot;keyword&quot;&gt;return&lt;/span&gt; k,v end
+   end
+   &lt;span class=&quot;keyword&quot;&gt;return&lt;/span&gt; nil
+end&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;If a table has both integer and non-integer keys, &lt;code&gt;pairs&lt;/code&gt; first iterates over the elements keyed with integer indices (in ascending key order) and then over the rest (in unspecified order). &lt;small&gt;(&lt;a href=&quot;http://www.lua.org/source/5.1/ltable.c.html#luaH_next&quot;&gt;source&lt;/a&gt;)&lt;/small&gt;
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;Lua&quot;&gt;&lt;span class=&quot;keyword&quot;&gt;function&lt;/span&gt; table_find_if_exceeds(t,limit)
+   &lt;span class=&quot;keyword&quot;&gt;return&lt;/span&gt; table_find_if(t, &lt;span class=&quot;keyword&quot;&gt;function&lt;/span&gt;(v) &lt;span class=&quot;keyword&quot;&gt;return&lt;/span&gt; v &gt; limit end)
+end&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;This one finds the first value in &lt;code&gt;t&lt;/code&gt; which exceeds &lt;code&gt;limit&lt;/code&gt;. Returns both the key and the value.
+
+&lt;/p&gt;
+&lt;p&gt;Utilizing these helper functions, we could build a solution to the original problem like this:
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;Lua&quot;&gt;&lt;span class=&quot;keyword&quot;&gt;function&lt;/span&gt; print_first_day_when_temp_exceeded(limit, templist)
+   day,degrees = table_find_if_exceeds(templist, limit)
+   &lt;span class=&quot;keyword&quot;&gt;if&lt;/span&gt; day then
+      &lt;span class=&quot;keyword&quot;&gt;print&lt;/span&gt;(string.format(&lt;span class=&quot;string&quot;&gt;&quot;The temperature on day #%d exceeded the limit of %d by %d degrees.&quot;&lt;/span&gt;, day, limit, degrees-limit))
+   end
+end
+
+print_first_day_when_temp_exceeded(&lt;span class=&quot;number&quot;&gt;36&lt;/span&gt;, daily_max_temperatures)&lt;/code&gt;&lt;/pre&gt;
+&lt;h6&gt;Understanding the for..in loop&lt;/h6&gt;
+&lt;p&gt;The &lt;a href=&quot;http://www.lua.org/manual/5.1/manual.html&quot;&gt;Lua manual&lt;/a&gt; gives the following definition for the &lt;code&gt;for..in&lt;/code&gt; loop:
+
+&lt;/p&gt;
+&lt;p&gt;A &lt;code&gt;for&lt;/code&gt; statement like
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;Lua&quot;&gt;&lt;span class=&quot;keyword&quot;&gt;for&lt;/span&gt; &lt;var_1&gt;, ···, &lt;var_n&gt; in &lt;explist&gt; &lt;span class=&quot;keyword&quot;&gt;do&lt;/span&gt;
+  &lt;block&gt;
+end&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;is equivalent to the following code:
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;Lua&quot;&gt;&lt;span class=&quot;keyword&quot;&gt;do&lt;/span&gt;
+  local f, s, &lt;span class=&quot;keyword&quot;&gt;var&lt;/span&gt; = &lt;explist&gt;
+  &lt;span class=&quot;keyword&quot;&gt;while&lt;/span&gt; &lt;span class=&quot;keyword&quot;&gt;true&lt;/span&gt; &lt;span class=&quot;keyword&quot;&gt;do&lt;/span&gt;
+    local &lt;var_1&gt;, ···, &lt;var_n&gt; = f(s, &lt;span class=&quot;keyword&quot;&gt;var&lt;/span&gt;)
+    &lt;span class=&quot;keyword&quot;&gt;var&lt;/span&gt; = &lt;var_1&gt;
+    &lt;span class=&quot;keyword&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;keyword&quot;&gt;var&lt;/span&gt; == nil then &lt;span class=&quot;keyword&quot;&gt;break&lt;/span&gt; end
+    &lt;block&gt;
+  end
+end&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;(&lt;code&gt;do...end&lt;/code&gt; creates a new lexical scope for a block of statements. &lt;code&gt;break&lt;/code&gt; can be used to exit the innermost &lt;code&gt;while&lt;/code&gt;, &lt;code&gt;repeat&lt;/code&gt; or &lt;code&gt;for&lt;/code&gt; loop.)
+
+&lt;/p&gt;
+&lt;p&gt;To help you decipher this definition, I offer the following code example:
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;Lua&quot;&gt;&lt;span class=&quot;keyword&quot;&gt;function&lt;/span&gt; range(from,to)
+  local &lt;span class=&quot;keyword&quot;&gt;function&lt;/span&gt; f(s,&lt;span class=&quot;keyword&quot;&gt;var&lt;/span&gt;)
+    &lt;span class=&quot;keyword&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;keyword&quot;&gt;var&lt;/span&gt; == nil then &lt;span class=&quot;keyword&quot;&gt;return&lt;/span&gt; from
+    &lt;span class=&quot;keyword&quot;&gt;elseif&lt;/span&gt; &lt;span class=&quot;keyword&quot;&gt;var&lt;/span&gt; &gt;= to then &lt;span class=&quot;keyword&quot;&gt;return&lt;/span&gt; nil
+    &lt;span class=&quot;keyword&quot;&gt;else&lt;/span&gt; &lt;span class=&quot;keyword&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;keyword&quot;&gt;var&lt;/span&gt;+&lt;span class=&quot;number&quot;&gt;1&lt;/span&gt; end
+  end
+  &lt;span class=&quot;keyword&quot;&gt;return&lt;/span&gt; f,nil,nil
+end
+
+local s = &lt;span class=&quot;string&quot;&gt;&quot;&quot;&lt;/span&gt;
+&lt;span class=&quot;keyword&quot;&gt;for&lt;/span&gt; i in range(&lt;span class=&quot;number&quot;&gt;1&lt;/span&gt;,&lt;span class=&quot;number&quot;&gt;10&lt;/span&gt;) &lt;span class=&quot;keyword&quot;&gt;do&lt;/span&gt; s = s..tostring(i) end
+assert(s==&lt;span class=&quot;string&quot;&gt;&quot;12345678910&quot;&lt;/span&gt;)&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;The &lt;code&gt;f&lt;/code&gt; &lt;em&gt;iterator function&lt;/em&gt; created and returned by &lt;code&gt;range(1,10)&lt;/code&gt; will be called with the following arguments during the &lt;code&gt;for..in&lt;/code&gt; loop (pseudo-code):
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;Lua&quot;&gt;f(s=nil,&lt;span class=&quot;keyword&quot;&gt;var&lt;/span&gt;=nil) =&gt; &lt;span class=&quot;number&quot;&gt;1&lt;/span&gt;
+f(s=nil,&lt;span class=&quot;keyword&quot;&gt;var&lt;/span&gt;=&lt;span class=&quot;number&quot;&gt;1&lt;/span&gt;) =&gt; &lt;span class=&quot;number&quot;&gt;2&lt;/span&gt;
+f(s=nil,&lt;span class=&quot;keyword&quot;&gt;var&lt;/span&gt;=&lt;span class=&quot;number&quot;&gt;2&lt;/span&gt;) =&gt; &lt;span class=&quot;number&quot;&gt;3&lt;/span&gt;
+...
+f(s=nil,&lt;span class=&quot;keyword&quot;&gt;var&lt;/span&gt;=&lt;span class=&quot;number&quot;&gt;9&lt;/span&gt;) =&gt; &lt;span class=&quot;number&quot;&gt;10&lt;/span&gt;
+f(s=nil,&lt;span class=&quot;keyword&quot;&gt;var&lt;/span&gt;=&lt;span class=&quot;number&quot;&gt;10&lt;/span&gt;) =&gt; nil&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Upon the first call, &lt;code&gt;f&lt;/code&gt; gets &lt;code&gt;var&lt;/code&gt;=&lt;code&gt;nil&lt;/code&gt;, which corresponds to the initial &lt;code&gt;var&lt;/code&gt; value returned by &lt;code&gt;range&lt;/code&gt;. This special &quot;warm-up&quot; case is handled by returning the first value in the series (&lt;code&gt;from&lt;/code&gt;).
+
+&lt;/p&gt;
+&lt;p&gt;From here on, &lt;code&gt;f&lt;/code&gt; will be called with the same &lt;code&gt;var&lt;/code&gt; which it returned in the previous iteration, and it continues to return &lt;code&gt;var+1&lt;/code&gt; until &lt;code&gt;var&lt;/code&gt; has reached the higher limit of &lt;code&gt;to&lt;/code&gt;. At that point, &lt;code&gt;f&lt;/code&gt; returns &lt;code&gt;nil&lt;/code&gt;, which signals the &lt;code&gt;for..in&lt;/code&gt; mechanism that the loop is over.
+
+&lt;/p&gt;
+&lt;p&gt;In this example, we haven&apos;t made use of the &lt;code&gt;s&lt;/code&gt; state variable, so I&apos;ll try to show you another - somewhat contrived and hypothetical (although possible) - example where &lt;code&gt;s&lt;/code&gt; could be put to good use:
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;Lua&quot;&gt;&lt;span class=&quot;keyword&quot;&gt;function&lt;/span&gt; mysql_query(sql,params)
+  local stmt = mysql_prepare(sql)
+  local resultset = stmt:execute(params)
+  local f(res)
+    &lt;span class=&quot;keyword&quot;&gt;return&lt;/span&gt; res:fetch_row()
+  end
+  &lt;span class=&quot;keyword&quot;&gt;return&lt;/span&gt; f,resultset
+end
+
+&lt;span class=&quot;keyword&quot;&gt;for&lt;/span&gt; row in mysql_query(&lt;span class=&quot;string&quot;&gt;&quot;SELECT * FROM users WHERE year_of_birth&lt;?&quot;&lt;/span&gt;, {&lt;span class=&quot;number&quot;&gt;1975&lt;/span&gt;}) &lt;span class=&quot;keyword&quot;&gt;do&lt;/span&gt;
+  &lt;span class=&quot;keyword&quot;&gt;print&lt;/span&gt;(string.format(&lt;span class=&quot;string&quot;&gt;&quot;user %s was born in %d&quot;&lt;/span&gt;, row.name, row.year_of_birth))
+end&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;The example is contrived because we don&apos;t really need the state parameter - the following definition of &lt;code&gt;mysql_query&lt;/code&gt; would also suffice:
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;Lua&quot;&gt;&lt;span class=&quot;keyword&quot;&gt;function&lt;/span&gt; mysql_query(sql,params)
+  local stmt = mysql_prepare(sql)
+  local resultset = stmt:execute(params)
+  &lt;span class=&quot;keyword&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;keyword&quot;&gt;function&lt;/span&gt;() &lt;span class=&quot;keyword&quot;&gt;return&lt;/span&gt; resultset:fetch_row() end
+end&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;This version would work because Lua functions are actually &lt;em&gt;closures&lt;/em&gt;: they can hold references to the local variables that were in scope at the point of their definition, even after the block of code which created them (&lt;code&gt;mysql_query&lt;/code&gt; in this case) has returned.
+
+&lt;/p&gt;
+&lt;h6&gt;Closures&lt;/h6&gt;
+&lt;p&gt;(This section may be a bit hard-core, feel free to skip it if you don&apos;t understand what is going on.)
+
+&lt;/p&gt;
+&lt;p&gt;Formally, each closure (= function) is a &lt;code&gt;&lt;proto,upvalues,env&gt;&lt;/code&gt; triple, where &lt;code&gt;proto&lt;/code&gt; is a compiled function skeleton (prototype), &lt;code&gt;upvalues&lt;/code&gt; is an array of references (pointers) to external local variables used by the closure and &lt;code&gt;env&lt;/code&gt; is a table used to look up the value of global variables.
+
+&lt;/p&gt;
+&lt;p&gt;When the &lt;code&gt;mysql_query&lt;/code&gt; function gets compiled - which happens only once, at parse time - the following prototype is created for the iterator function it returns on each call:
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;Lua&quot;&gt;&lt;span class=&quot;keyword&quot;&gt;function&lt;/span&gt;()
+  &lt;span class=&quot;keyword&quot;&gt;return&lt;/span&gt; &lt;uv1&gt;:fetch_row()
+end&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;The compiler detects that each iterator function created by &lt;code&gt;mysql_query&lt;/code&gt; will reference one external local variable (labeled &lt;code&gt;resultset&lt;/code&gt; in the code). In the compiled prototype, &lt;code&gt;&lt;uv1&gt;&lt;/code&gt; becomes a placeholder for the first element of the closure&apos;s &lt;code&gt;&lt;upvalues&gt;&lt;/code&gt; array, which at this point does not exist yet.
+
+&lt;/p&gt;
+&lt;p&gt;When we actually call &lt;code&gt;mysql_query&lt;/code&gt; and the argument of the final &lt;code&gt;return&lt;/code&gt; statement needs to be constructed, the already compiled function prototype is &lt;em&gt;instantiated&lt;/em&gt;: a new closure is created with its &lt;code&gt;proto&lt;/code&gt; set to the compiled prototype, &lt;code&gt;upvalues&lt;/code&gt; set to a newly allocated array of one element (filled with a reference to the &lt;code&gt;resultset&lt;/code&gt; variable created &lt;em&gt;during this particular execution of&lt;/em&gt; &lt;code&gt;mysql_query&lt;/code&gt;) and &lt;code&gt;env&lt;/code&gt; set to the environment associated with the &lt;code&gt;mysql_query&lt;/code&gt; function.
+
+&lt;/p&gt;
+&lt;p&gt;Functions (= closures) inherit their environment from the closure that created them. Functions defined at the top level inherit the environment of the top-level closure, which is initially the &lt;em&gt;global environment&lt;/em&gt;, a singleton table created at VM initialization. The standard library functions are also registered in the global environment.
+
+&lt;/p&gt;
+&lt;p&gt;The &lt;code&gt;env&lt;/code&gt; of a closure can be retrieved and changed using the &lt;code&gt;getfenv(f)&lt;/code&gt; and &lt;code&gt;setfenv(f,table)&lt;/code&gt; functions, respectively. The global environment can be acquired by calling &lt;code&gt;getfenv(0)&lt;/code&gt;. Using these functions, it&apos;s relatively easy to set up a sandboxed Lua environment for execution of potentially dangerous Lua code:
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;Lua&quot;&gt;local safe_env = { &lt;span class=&quot;keyword&quot;&gt;print&lt;/span&gt; = &lt;span class=&quot;keyword&quot;&gt;print&lt;/span&gt;, math = math }
+local f = loadfile(&lt;span class=&quot;string&quot;&gt;&quot;user-provided-script.lua&quot;&lt;/span&gt;)
+setfenv(f, safe_env)
+f()&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;With this setup, the only things &lt;code&gt;f()&lt;/code&gt; will have access to are the language keywords (&lt;code&gt;if&lt;/code&gt;, &lt;code&gt;while&lt;/code&gt;, &lt;code&gt;for&lt;/code&gt;, &lt;code&gt;function&lt;/code&gt;, etc.), the &lt;code&gt;print&lt;/code&gt; function and all functions in the &lt;code&gt;math&lt;/code&gt; module. In particular, &lt;code&gt;f()&lt;/code&gt; cannot access the global environment because &lt;code&gt;getfenv&lt;/code&gt; is not available to it.
+
+&lt;/p&gt;
+&lt;p&gt;Warning: if you do a &lt;code&gt;setfenv(0,{})&lt;/code&gt;, you will be most likely doomed.
+
+&lt;/p&gt;
+&lt;h6&gt;Arithmetic progressions&lt;/h6&gt;
+&lt;p&gt;For this type of iteration, we use another variant of the &lt;code&gt;for&lt;/code&gt; loop:
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;Lua&quot;&gt;local tablex = {}
+
+&lt;span class=&quot;keyword&quot;&gt;function&lt;/span&gt; tablex.range (start,finish,step)
+   &lt;span class=&quot;keyword&quot;&gt;if&lt;/span&gt; start == finish then &lt;span class=&quot;keyword&quot;&gt;return&lt;/span&gt; {start}
+   &lt;span class=&quot;keyword&quot;&gt;elseif&lt;/span&gt; start &gt; finish then &lt;span class=&quot;keyword&quot;&gt;return&lt;/span&gt; {}
+   end
+   local res = {}
+   local k = &lt;span class=&quot;number&quot;&gt;1&lt;/span&gt;
+   &lt;span class=&quot;keyword&quot;&gt;if&lt;/span&gt; not step then
+      step = finish &gt; start &lt;span class=&quot;keyword&quot;&gt;and&lt;/span&gt; &lt;span class=&quot;number&quot;&gt;1&lt;/span&gt; &lt;span class=&quot;keyword&quot;&gt;or&lt;/span&gt; -&lt;span class=&quot;number&quot;&gt;1&lt;/span&gt;
+   end
+   &lt;span class=&quot;keyword&quot;&gt;for&lt;/span&gt; i=start,finish,step &lt;span class=&quot;keyword&quot;&gt;do&lt;/span&gt; res[k]=i; k=k+&lt;span class=&quot;number&quot;&gt;1&lt;/span&gt; end
+   &lt;span class=&quot;keyword&quot;&gt;return&lt;/span&gt; res
+end
+
+local t = tablex.range(&lt;span class=&quot;number&quot;&gt;1&lt;/span&gt;,&lt;span class=&quot;number&quot;&gt;10&lt;/span&gt;,&lt;span class=&quot;number&quot;&gt;3&lt;/span&gt;)
+assert(&lt;span class=&quot;comment&quot;&gt;#t==4 and t[1]==1 and t[2]==4 and t[3]==7 and t[4]==10)&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;What you are seeing here is probably the simplest approach to the creation of namespaces: just make a table and place functions into it.
+
+&lt;/p&gt;
+&lt;p&gt;&lt;code&gt;function tablex.range() ... end&lt;/code&gt; is shorthand for &lt;code&gt;tablex.range = function() ... end&lt;/code&gt;: we create a function and assign it to a table element.
+
+&lt;/p&gt;
+&lt;p&gt;The following function returns the &lt;em&gt;tail&lt;/em&gt; of its list argument - a new list consisting of every element in the original list except the first:
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;Lua&quot;&gt;local append = table.insert
+
+&lt;span class=&quot;keyword&quot;&gt;function&lt;/span&gt; tail(ls)
+   local res = {}
+   &lt;span class=&quot;keyword&quot;&gt;for&lt;/span&gt; i = &lt;span class=&quot;number&quot;&gt;2&lt;/span&gt;,&lt;span class=&quot;comment&quot;&gt;#ls do&lt;/span&gt;
+      append(res,ls[i])
+   end
+   &lt;span class=&quot;keyword&quot;&gt;return&lt;/span&gt; res
+end&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;The &lt;code&gt;step&lt;/code&gt; argument of a counted &lt;code&gt;for&lt;/code&gt; loop defaults to 1.
+
+&lt;/p&gt;
+&lt;p&gt;The &lt;code&gt;table.insert&lt;/code&gt; function comes from the standard library. The reason why the code creates a local proxy for it may be interesting: &lt;code&gt;tail&lt;/code&gt; - as a closure - has access to both external local variables in its enclosing scopes (via &lt;code&gt;upvalues&lt;/code&gt;) and global variables (through its &lt;code&gt;environment&lt;/code&gt;). When &lt;code&gt;tail&lt;/code&gt;&apos;s function prototype gets compiled, the compiler analyzes the function&apos;s variable references and assigns them into three groups: stack, upvalue and env references. References to stack variables - function arguments and local variables defined inside the function - will become simple pointers to a known element on the stack. References to upvalues - external locals in any of the enclosing scopes - will become pointers to elements of the &lt;code&gt;upvalues&lt;/code&gt; array, while global references will be compiled into a table lookup (the name of the variable will be looked up - at runtime - in the closure&apos;s &lt;code&gt;env&lt;/code&gt;).
+
+&lt;/p&gt;
+&lt;p&gt;As stack and upvalue lookups need only a pointer dereference, and the position of a given item in the respective array is hard-coded into the function&apos;s bytecode, these can be significantly faster than the hash table lookup implied by a global reference.
+
+&lt;/p&gt;
+&lt;p&gt;On the other hand, statically hard-coded upvalues cannot be (easily) replaced after the function has been compiled, so if we want dynamic code updates (live coding), the use of global references may be preferred.
+
+&lt;/p&gt;
+&lt;h6&gt;While..do..end&lt;/h6&gt;
+&lt;p&gt;The following function joins a list of path components into a complete pathstring, using the path separator passed as the first argument:
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;Lua&quot;&gt;&lt;span class=&quot;keyword&quot;&gt;function&lt;/span&gt; path_join(sep, ...)
+   local parts = {...}
+   &lt;span class=&quot;keyword&quot;&gt;for&lt;/span&gt; i,part in ipairs(parts) &lt;span class=&quot;keyword&quot;&gt;do&lt;/span&gt;
+      -- Strip leading slashes on all but first item
+      &lt;span class=&quot;keyword&quot;&gt;if&lt;/span&gt; i &gt; &lt;span class=&quot;number&quot;&gt;1&lt;/span&gt; then
+         &lt;span class=&quot;keyword&quot;&gt;while&lt;/span&gt; part:sub(&lt;span class=&quot;number&quot;&gt;1&lt;/span&gt;,&lt;span class=&quot;number&quot;&gt;1&lt;/span&gt;) == sep &lt;span class=&quot;keyword&quot;&gt;do&lt;/span&gt;
+            part = part:sub(&lt;span class=&quot;number&quot;&gt;2&lt;/span&gt;)
+         end
+      end
+      -- Strip trailing slashes on all but last item
+      &lt;span class=&quot;keyword&quot;&gt;if&lt;/span&gt; i &lt; &lt;span class=&quot;comment&quot;&gt;#parts then&lt;/span&gt;
+         &lt;span class=&quot;keyword&quot;&gt;while&lt;/span&gt; part:sub(&lt;span class=&quot;comment&quot;&gt;#part) == sep do&lt;/span&gt;
+            part = part:sub(&lt;span class=&quot;number&quot;&gt;1&lt;/span&gt;,&lt;span class=&quot;comment&quot;&gt;#part-1)&lt;/span&gt;
+         end
+      end
+      parts[i] = part
+   end
+   &lt;span class=&quot;keyword&quot;&gt;return&lt;/span&gt; table.concat(parts,sep)
+end
+
+assert(path_join(&lt;span class=&quot;string&quot;&gt;'/'&lt;/span&gt;, &lt;span class=&quot;string&quot;&gt;'/usr'&lt;/span&gt;, &lt;span class=&quot;string&quot;&gt;'bin'&lt;/span&gt;, &lt;span class=&quot;string&quot;&gt;'luajit'&lt;/span&gt;) == &lt;span class=&quot;string&quot;&gt;'/usr/bin/luajit'&lt;/span&gt;)&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;The major new element introduced here is the &lt;em&gt;vararg expression&lt;/em&gt; (&lt;code&gt;...&lt;/code&gt;) used to collect the arguments following &lt;code&gt;sep&lt;/code&gt;.
+
+&lt;/p&gt;
+&lt;p&gt;This is a special construct with only a handful of uses:
+
+&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;you may use it inside a table constructor (if used in the middle, it expands to the first item, if used as the last value, it expands to all items)&lt;/li&gt;
+&lt;li&gt;you may use it on the right side of a multiple assignment (with the same rules)&lt;/li&gt;
+&lt;li&gt;you can return it from a function (it gets unpacked to multiple return values)&lt;/li&gt;
+&lt;li&gt;you can pass it to another function (if passed as the last argument, the callee gets the contained items as extra arguments, if passed as a middle arg, the callee gets the first item)&lt;/li&gt;
+&lt;/ol&gt;
+&lt;p&gt;&lt;code&gt;local parts = {...}&lt;/code&gt; places the extra arguments into a local table for easy access.
+
+&lt;/p&gt;
+&lt;p&gt;The &lt;code&gt;ipairs(t)&lt;/code&gt; function creates an iterator which returns a series of &lt;code&gt;(1,t[1])&lt;/code&gt;, &lt;code&gt;(2,t[2])&lt;/code&gt;, &lt;code&gt;(3,t[3])&lt;/code&gt;, ... pairs. This function was invented for iterating integer-indexed arrays. A possible Lua implementation:
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;Lua&quot;&gt;&lt;span class=&quot;keyword&quot;&gt;function&lt;/span&gt; ipairs(t)
+   local &lt;span class=&quot;keyword&quot;&gt;function&lt;/span&gt; f(t,&lt;span class=&quot;keyword&quot;&gt;var&lt;/span&gt;)
+      &lt;span class=&quot;keyword&quot;&gt;var&lt;/span&gt; = &lt;span class=&quot;keyword&quot;&gt;var&lt;/span&gt; + &lt;span class=&quot;number&quot;&gt;1&lt;/span&gt;
+      local next = t[&lt;span class=&quot;keyword&quot;&gt;var&lt;/span&gt;]
+      &lt;span class=&quot;keyword&quot;&gt;if&lt;/span&gt; next then
+         &lt;span class=&quot;keyword&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;keyword&quot;&gt;var&lt;/span&gt;, next
+      &lt;span class=&quot;keyword&quot;&gt;else&lt;/span&gt;
+         &lt;span class=&quot;keyword&quot;&gt;return&lt;/span&gt; nil
+      end
+   end
+   &lt;span class=&quot;keyword&quot;&gt;return&lt;/span&gt; f,t,&lt;span class=&quot;number&quot;&gt;0&lt;/span&gt;
+end&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;The &lt;code&gt;s:sub(start[,end])&lt;/code&gt; method returns a substring of &lt;code&gt;s&lt;/code&gt; starting at (1-based) index &lt;code&gt;start&lt;/code&gt; and ending at &lt;code&gt;end&lt;/code&gt; (inclusive). If &lt;code&gt;end&lt;/code&gt; is not supplied, it defaults to &lt;code&gt;#s&lt;/code&gt;. Both &lt;code&gt;start&lt;/code&gt; and &lt;code&gt;end&lt;/code&gt; may be negative, in which case they count from the end of the string (&lt;code&gt;-1&lt;/code&gt; corresponds to the last character).
+
+&lt;/p&gt;
+&lt;p&gt;Comments begin with &lt;code&gt;--&lt;/code&gt; and extend to the end of line.
+
+&lt;/p&gt;
+&lt;p&gt;&lt;code&gt;table.concat(t,sep)&lt;/code&gt; joins the elements of &lt;code&gt;t&lt;/code&gt; into a string, with the elements separated by &lt;code&gt;sep&lt;/code&gt;.
+
+&lt;/p&gt;
+&lt;h6&gt;Repeat..until&lt;/h6&gt;
+&lt;pre&gt;&lt;code class=&quot;Lua&quot;&gt;&lt;span class=&quot;keyword&quot;&gt;function&lt;/span&gt; fs.readfile(path)
+   local fd = fs.open(path, &lt;span class=&quot;string&quot;&gt;&quot;r&quot;&lt;/span&gt;)
+   local parts = {}
+   local length = &lt;span class=&quot;number&quot;&gt;0&lt;/span&gt;
+   local offset = &lt;span class=&quot;number&quot;&gt;0&lt;/span&gt;
+   repeat
+      local chunk, len = fs.read(fd, offset, &lt;span class=&quot;number&quot;&gt;4096&lt;/span&gt;)
+      &lt;span class=&quot;keyword&quot;&gt;if&lt;/span&gt; len &gt; &lt;span class=&quot;number&quot;&gt;0&lt;/span&gt; then
+         offset = offset + len
+         length = length + &lt;span class=&quot;number&quot;&gt;1&lt;/span&gt;
+         parts[length] = chunk
+      end
+   until len == &lt;span class=&quot;number&quot;&gt;0&lt;/span&gt;
+   fs.close(fd)
+   &lt;span class=&quot;keyword&quot;&gt;return&lt;/span&gt; table.concat(parts)
+end&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;This should be trivial to understand by now. The loop exits when the expression following &lt;code&gt;until&lt;/code&gt; becomes logically true.
+
+&lt;/p&gt;
+&lt;p&gt;As you see, the local variable &lt;code&gt;len&lt;/code&gt; - defined inside the repeat..until block - can be also accessed in the expression after &lt;code&gt;until&lt;/code&gt;. In other words, the scope of the repeat..until block extends to the expression after &lt;code&gt;until&lt;/code&gt;.
+
+&lt;/p&gt;
+&lt;h6&gt;Metatables&lt;/h6&gt;
+&lt;p&gt;A &lt;em&gt;metatable&lt;/em&gt; is an ordinary Lua table with VM-defined, special keys. These metatables can be associated with any Lua value (usually a table) to change the behavior of the following VM operations:
+
+&lt;/p&gt;
+&lt;table&gt;
+  &lt;tr&gt;
+    &lt;th&gt;Operator symbol&lt;/th&gt;
+    &lt;th&gt;Name of operation&lt;/th&gt;
+    &lt;th&gt;Corresponding metatable key&lt;/th&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+    &lt;td&gt;&lt;code&gt;+&lt;/code&gt;&lt;/th&gt;
+    &lt;td&gt;addition&lt;/th&gt;
+    &lt;td&gt;&lt;code&gt;__add&lt;/code&gt;&lt;/th&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+    &lt;td&gt;&lt;code&gt;-&lt;/code&gt;&lt;/th&gt;
+    &lt;td&gt;subtraction&lt;/th&gt;
+    &lt;td&gt;&lt;code&gt;__sub&lt;/code&gt;&lt;/th&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+    &lt;td&gt;&lt;code&gt;*&lt;/code&gt;&lt;/th&gt;
+    &lt;td&gt;multiplication&lt;/th&gt;
+    &lt;td&gt;&lt;code&gt;__mul&lt;/code&gt;&lt;/th&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+    &lt;td&gt;&lt;code&gt;/&lt;/code&gt;&lt;/th&gt;
+    &lt;td&gt;division&lt;/th&gt;
+    &lt;td&gt;&lt;code&gt;__div&lt;/code&gt;&lt;/th&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+    &lt;td&gt;&lt;code&gt;%&lt;/code&gt;&lt;/th&gt;
+    &lt;td&gt;modulo&lt;/th&gt;
+    &lt;td&gt;&lt;code&gt;__mod&lt;/code&gt;&lt;/th&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+    &lt;td&gt;&lt;code&gt;^&lt;/code&gt;&lt;/th&gt;
+    &lt;td&gt;exponentiation&lt;/th&gt;
+    &lt;td&gt;&lt;code&gt;__pow&lt;/code&gt;&lt;/th&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+    &lt;td&gt;&lt;code&gt;-&lt;/code&gt;&lt;/th&gt;
+    &lt;td&gt;unary minus&lt;/th&gt;
+    &lt;td&gt;&lt;code&gt;__unm&lt;/code&gt;&lt;/th&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+    &lt;td&gt;&lt;code&gt;..&lt;/code&gt;&lt;/th&gt;
+    &lt;td&gt;concatenation&lt;/th&gt;
+    &lt;td&gt;&lt;code&gt;__concat&lt;/code&gt;&lt;/th&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+    &lt;td&gt;&lt;code&gt;#&lt;/code&gt;&lt;/th&gt;
+    &lt;td&gt;length&lt;/th&gt;
+    &lt;td&gt;&lt;code&gt;__len&lt;/code&gt;&lt;/th&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+    &lt;td&gt;&lt;code&gt;==&lt;/code&gt;&lt;/th&gt;
+    &lt;td&gt;equality test&lt;/th&gt;
+    &lt;td&gt;&lt;code&gt;__eq&lt;/code&gt;&lt;/th&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+    &lt;td&gt;&lt;code&gt;&lt;&lt;/code&gt;&lt;/th&gt;
+    &lt;td&gt;less than&lt;/th&gt;
+    &lt;td&gt;&lt;code&gt;__lt&lt;/code&gt;&lt;/th&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+    &lt;td&gt;&lt;code&gt;&lt;=&lt;/code&gt;&lt;/th&gt;
+    &lt;td&gt;less than or equal&lt;/th&gt;
+    &lt;td&gt;&lt;code&gt;__le&lt;/code&gt;&lt;/th&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+    &lt;td&gt;&lt;code&gt;[]&lt;/code&gt;&lt;/th&gt;
+    &lt;td&gt;get element&lt;/th&gt;
+    &lt;td&gt;&lt;code&gt;__index&lt;/code&gt;&lt;/th&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+    &lt;td&gt;&lt;code&gt;[]=&lt;/code&gt;&lt;/th&gt;
+    &lt;td&gt;set element&lt;/th&gt;
+    &lt;td&gt;&lt;code&gt;__newindex&lt;/code&gt;&lt;/th&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+    &lt;td&gt;&lt;code&gt;()&lt;/code&gt;&lt;/th&gt;
+    &lt;td&gt;call&lt;/th&gt;
+    &lt;td&gt;&lt;code&gt;__call&lt;/code&gt;&lt;/th&gt;
+  &lt;/tr&gt;
+&lt;/table&gt;
+
+&lt;p&gt;For instance, if you implemented complex numbers as a table of two elements (real and imaginary components), and arrange it so that every such table gets an associated metatable which overrides the standard arithmetic operations in the right way, you could use these operators on your complex tables in the same way you would use them on ordinary numbers.
+
+&lt;/p&gt;
+&lt;p&gt;Instead of discussing all the minutae regarding metatables - which you can find in the &lt;a href=&quot;http://www.lua.org/manual/5.1/manual.html&quot;&gt;Lua manual&lt;/a&gt; -, I&apos;ll show you how to define a custom &lt;code&gt;List&lt;/code&gt; datatype using them.
+
+&lt;/p&gt;
+&lt;p&gt;Our new &lt;code&gt;List&lt;/code&gt; datatype will behave like a class: it will have a &quot;constructor&quot; and &quot;methods&quot; which can be invoked on its &quot;objects&quot;.
+
+&lt;/p&gt;
+&lt;p&gt;The class methods will be stored as functions inside a &lt;code&gt;List&lt;/code&gt; table (the &quot;class&quot; itself):
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;Lua&quot;&gt;&lt;span class=&quot;keyword&quot;&gt;List&lt;/span&gt; = {}
+&lt;span class=&quot;keyword&quot;&gt;List&lt;/span&gt;.__index = &lt;span class=&quot;keyword&quot;&gt;List&lt;/span&gt;
+
+&lt;span class=&quot;keyword&quot;&gt;function&lt;/span&gt; &lt;span class=&quot;keyword&quot;&gt;List&lt;/span&gt;.&lt;span class=&quot;keyword&quot;&gt;new&lt;/span&gt;(t)
+   t = t &lt;span class=&quot;keyword&quot;&gt;or&lt;/span&gt; {}
+   &lt;span class=&quot;keyword&quot;&gt;return&lt;/span&gt; setmetatable(t, &lt;span class=&quot;keyword&quot;&gt;List&lt;/span&gt;)
+end&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;code&gt;List.new()&lt;/code&gt; creates a new List object, which is nothing more than a plain table with &lt;code&gt;List&lt;/code&gt; as its metatable. &lt;code&gt;setmetatable(t,mt)&lt;/code&gt; sets &lt;code&gt;mt&lt;/code&gt; as the metatable of &lt;code&gt;t&lt;/code&gt; and then returns &lt;code&gt;t&lt;/code&gt;.
+
+&lt;/p&gt;
+&lt;p&gt;Before trying to understand the &lt;code&gt;List.__index = List&lt;/code&gt; line, let&apos;s define some methods:
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;Lua&quot;&gt;&lt;span class=&quot;keyword&quot;&gt;function&lt;/span&gt; &lt;span class=&quot;keyword&quot;&gt;List&lt;/span&gt;:append(i)
+   table.insert(&lt;span class=&quot;keyword&quot;&gt;self&lt;/span&gt;,i)
+   &lt;span class=&quot;keyword&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;keyword&quot;&gt;self&lt;/span&gt;
+end
+
+&lt;span class=&quot;keyword&quot;&gt;List&lt;/span&gt;.push = &lt;span class=&quot;keyword&quot;&gt;List&lt;/span&gt;.append
+
+&lt;span class=&quot;keyword&quot;&gt;function&lt;/span&gt; &lt;span class=&quot;keyword&quot;&gt;List&lt;/span&gt;:extend(L)
+   &lt;span class=&quot;keyword&quot;&gt;for&lt;/span&gt; i = &lt;span class=&quot;number&quot;&gt;1&lt;/span&gt;,&lt;span class=&quot;comment&quot;&gt;#L do table.insert(self,L[i]) end&lt;/span&gt;
+   &lt;span class=&quot;keyword&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;keyword&quot;&gt;self&lt;/span&gt;
+end&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;code&gt;function List:append(i) ... end&lt;/code&gt; is syntactic sugar for &lt;code&gt;function List.append(self,i) ... end&lt;/code&gt;. Similarly, calling &lt;code&gt;obj:method(...)&lt;/code&gt; is the same as calling &lt;code&gt;obj.method(obj, ...)&lt;/code&gt; (but &lt;code&gt;obj&lt;/code&gt; is evaluated only once).
+
+&lt;/p&gt;
+&lt;p&gt;&lt;code&gt;List.push&lt;/code&gt; is defined as an alias for &lt;code&gt;List.append&lt;/code&gt;.
+
+&lt;/p&gt;
+&lt;p&gt;Now let&apos;s discuss what happens when you do this:
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;Lua&quot;&gt;local ls = &lt;span class=&quot;keyword&quot;&gt;List&lt;/span&gt;.&lt;span class=&quot;keyword&quot;&gt;new&lt;/span&gt;()
+ls:push(&lt;span class=&quot;number&quot;&gt;1&lt;/span&gt;)&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;After the assignment, &lt;code&gt;ls&lt;/code&gt; is a plain (and empty) table, with its metatable set to &lt;code&gt;List&lt;/code&gt;. When the VM tries to find &lt;code&gt;ls.push&lt;/code&gt;, it doesn&apos;t find it in &lt;code&gt;ls&lt;/code&gt; itself, so it checks whether &lt;code&gt;ls&lt;/code&gt; has a metatable (it has) and whether this metatable has an &lt;code&gt;__index&lt;/code&gt; key (it has). If the value under the &lt;code&gt;__index&lt;/code&gt; key is a table (it is), then the VM checks this table for a &lt;code&gt;push&lt;/code&gt; key as well. If &lt;code&gt;push&lt;/code&gt; exists there, its value is returned as the lookup result.
+
+&lt;/p&gt;
+&lt;p&gt;Now you can understand why &lt;code&gt;List.__index&lt;/code&gt; has been set to &lt;code&gt;List&lt;/code&gt; itself: to let List objects find their methods.
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;Lua&quot;&gt;&lt;span class=&quot;keyword&quot;&gt;function&lt;/span&gt; &lt;span class=&quot;keyword&quot;&gt;List&lt;/span&gt;:insert(i, x)
+   table.insert(&lt;span class=&quot;keyword&quot;&gt;self&lt;/span&gt;,i,x)
+   &lt;span class=&quot;keyword&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;keyword&quot;&gt;self&lt;/span&gt;
+end
+
+&lt;span class=&quot;keyword&quot;&gt;function&lt;/span&gt; &lt;span class=&quot;keyword&quot;&gt;List&lt;/span&gt;:remove (i)
+   table.remove(&lt;span class=&quot;keyword&quot;&gt;self&lt;/span&gt;,i)
+   &lt;span class=&quot;keyword&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;keyword&quot;&gt;self&lt;/span&gt;
+end&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;The three-argument version of &lt;code&gt;table.insert(t,i,x)&lt;/code&gt; inserts &lt;code&gt;x&lt;/code&gt; at position &lt;code&gt;i&lt;/code&gt;, &lt;code&gt;table.remove(t,i)&lt;/code&gt; removes the &lt;code&gt;i&lt;/code&gt;th element.
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;Lua&quot;&gt;&lt;span class=&quot;keyword&quot;&gt;function&lt;/span&gt; &lt;span class=&quot;keyword&quot;&gt;List&lt;/span&gt;:remove_value(x)
+   &lt;span class=&quot;keyword&quot;&gt;for&lt;/span&gt; i=&lt;span class=&quot;number&quot;&gt;1&lt;/span&gt;,&lt;span class=&quot;comment&quot;&gt;#self do&lt;/span&gt;
+      &lt;span class=&quot;keyword&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;keyword&quot;&gt;self&lt;/span&gt;[i]==x then table.remove(&lt;span class=&quot;keyword&quot;&gt;self&lt;/span&gt;,i) &lt;span class=&quot;keyword&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;keyword&quot;&gt;self&lt;/span&gt; end
+   end
+   &lt;span class=&quot;keyword&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;keyword&quot;&gt;self&lt;/span&gt;
+end
+
+&lt;span class=&quot;keyword&quot;&gt;function&lt;/span&gt; &lt;span class=&quot;keyword&quot;&gt;List&lt;/span&gt;:pop(i)
+   &lt;span class=&quot;keyword&quot;&gt;if&lt;/span&gt; not i then i = &lt;span class=&quot;comment&quot;&gt;#self end&lt;/span&gt;
+   &lt;span class=&quot;keyword&quot;&gt;return&lt;/span&gt; table.remove(&lt;span class=&quot;keyword&quot;&gt;self&lt;/span&gt;,i)
+end
+
+&lt;span class=&quot;keyword&quot;&gt;function&lt;/span&gt; &lt;span class=&quot;keyword&quot;&gt;List&lt;/span&gt;:count(x)
+   local cnt=&lt;span class=&quot;number&quot;&gt;0&lt;/span&gt;
+   &lt;span class=&quot;keyword&quot;&gt;for&lt;/span&gt; i=&lt;span class=&quot;number&quot;&gt;1&lt;/span&gt;,&lt;span class=&quot;comment&quot;&gt;#self do&lt;/span&gt;
+      &lt;span class=&quot;keyword&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;keyword&quot;&gt;self&lt;/span&gt;[i]==x then cnt=cnt+&lt;span class=&quot;number&quot;&gt;1&lt;/span&gt; end
+   end
+   &lt;span class=&quot;keyword&quot;&gt;return&lt;/span&gt; cnt
+end&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;These are all pretty straight-forward.
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;Lua&quot;&gt;&lt;span class=&quot;keyword&quot;&gt;function&lt;/span&gt; &lt;span class=&quot;keyword&quot;&gt;List&lt;/span&gt;:reverse()
+   local t = &lt;span class=&quot;keyword&quot;&gt;self&lt;/span&gt;
+   local n = &lt;span class=&quot;comment&quot;&gt;#t&lt;/span&gt;
+   local n2 = n/&lt;span class=&quot;number&quot;&gt;2&lt;/span&gt;
+   &lt;span class=&quot;keyword&quot;&gt;for&lt;/span&gt; i = &lt;span class=&quot;number&quot;&gt;1&lt;/span&gt;,n2 &lt;span class=&quot;keyword&quot;&gt;do&lt;/span&gt;
+      local k = n-i+&lt;span class=&quot;number&quot;&gt;1&lt;/span&gt;
+      t[i],t[k] = t[k],t[i]
+   end
+   &lt;span class=&quot;keyword&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;keyword&quot;&gt;self&lt;/span&gt;
+end&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Here we can see an important feature of multiple assignment: in &lt;code&gt;t[i],t[k] = t[k],t[i]&lt;/code&gt; Lua does the assignment only after all expressions on the right side have been evaluated.
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;Lua&quot;&gt;&lt;span class=&quot;keyword&quot;&gt;function&lt;/span&gt; &lt;span class=&quot;keyword&quot;&gt;List&lt;/span&gt;:minmax()
+   local vmin,vmax = &lt;span class=&quot;number&quot;&gt;1&lt;/span&gt;e70,-&lt;span class=&quot;number&quot;&gt;1&lt;/span&gt;e70
+   &lt;span class=&quot;keyword&quot;&gt;for&lt;/span&gt; i = &lt;span class=&quot;number&quot;&gt;1&lt;/span&gt;,&lt;span class=&quot;comment&quot;&gt;#self do&lt;/span&gt;
+      local v = &lt;span class=&quot;keyword&quot;&gt;self&lt;/span&gt;[i]
+      &lt;span class=&quot;keyword&quot;&gt;if&lt;/span&gt; v &lt; vmin then vmin = v end
+      &lt;span class=&quot;keyword&quot;&gt;if&lt;/span&gt; v &gt; vmax then vmax = v end
+   end
+   &lt;span class=&quot;keyword&quot;&gt;return&lt;/span&gt; vmin,vmax
+end
+
+&lt;span class=&quot;keyword&quot;&gt;function&lt;/span&gt; &lt;span class=&quot;keyword&quot;&gt;List&lt;/span&gt;:len()
+   &lt;span class=&quot;keyword&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;comment&quot;&gt;#self&lt;/span&gt;
+end
+
+&lt;span class=&quot;keyword&quot;&gt;function&lt;/span&gt; &lt;span class=&quot;keyword&quot;&gt;List&lt;/span&gt;:&lt;span class=&quot;keyword&quot;&gt;clone&lt;/span&gt;()
+   local ls = &lt;span class=&quot;keyword&quot;&gt;List&lt;/span&gt;.&lt;span class=&quot;keyword&quot;&gt;new&lt;/span&gt;({})
+   ls:extend(&lt;span class=&quot;keyword&quot;&gt;self&lt;/span&gt;)
+   &lt;span class=&quot;keyword&quot;&gt;return&lt;/span&gt; ls
+end
+
+&lt;span class=&quot;keyword&quot;&gt;function&lt;/span&gt; &lt;span class=&quot;keyword&quot;&gt;List&lt;/span&gt;:__concat(L)
+   local ls = &lt;span class=&quot;keyword&quot;&gt;self&lt;/span&gt;:&lt;span class=&quot;keyword&quot;&gt;clone&lt;/span&gt;()
+   ls:extend(L)
+   &lt;span class=&quot;keyword&quot;&gt;return&lt;/span&gt; ls
+end&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Here we defined a &lt;code&gt;__concat&lt;/code&gt; metamethod to concatenate two &lt;code&gt;List&lt;/code&gt; values.
+
+&lt;/p&gt;
+&lt;p&gt;Let&apos;s define the equality operation as well:
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;Lua&quot;&gt;&lt;span class=&quot;keyword&quot;&gt;function&lt;/span&gt; &lt;span class=&quot;keyword&quot;&gt;List&lt;/span&gt;:equals(L)
+   &lt;span class=&quot;keyword&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;comment&quot;&gt;#self ~= #L then return false end&lt;/span&gt;
+   &lt;span class=&quot;keyword&quot;&gt;for&lt;/span&gt; i = &lt;span class=&quot;number&quot;&gt;1&lt;/span&gt;,&lt;span class=&quot;comment&quot;&gt;#self do&lt;/span&gt;
+      &lt;span class=&quot;keyword&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;keyword&quot;&gt;self&lt;/span&gt;[i] ~= L[i] then &lt;span class=&quot;keyword&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;keyword&quot;&gt;false&lt;/span&gt; end
+   end
+   &lt;span class=&quot;keyword&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;keyword&quot;&gt;true&lt;/span&gt;
+end
+
+&lt;span class=&quot;keyword&quot;&gt;List&lt;/span&gt;.__eq = &lt;span class=&quot;keyword&quot;&gt;List&lt;/span&gt;.equals&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;The reason for the indirection (&lt;code&gt;__eq&lt;/code&gt; =&gt; &lt;code&gt;equals&lt;/code&gt;): the equality metamethod is invoked only if the compared values have the same metatable (both are &lt;code&gt;List&lt;/code&gt;s). It is &lt;em&gt;not&lt;/em&gt; invoked if we try to compare a List with a plain table, so we provide a separate &lt;code&gt;equals&lt;/code&gt; method for that.
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;Lua&quot;&gt;local &lt;span class=&quot;keyword&quot;&gt;function&lt;/span&gt; tostring_q(val)
+   local s = tostring(val)
+   &lt;span class=&quot;keyword&quot;&gt;if&lt;/span&gt; type(val) == &lt;span class=&quot;string&quot;&gt;'string'&lt;/span&gt; then
+      s = &lt;span class=&quot;string&quot;&gt;'&quot;'&lt;/span&gt;..s..&lt;span class=&quot;string&quot;&gt;'&quot;'&lt;/span&gt;
+   end
+   &lt;span class=&quot;keyword&quot;&gt;return&lt;/span&gt; s
+end&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;This is a helper function for the &lt;code&gt;List.join&lt;/code&gt; method defined below: if &lt;code&gt;val&lt;/code&gt; is a string, it returns it between double quotes, otherwise returns it stringified with &lt;code&gt;tostring&lt;/code&gt;.
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;Lua&quot;&gt;&lt;span class=&quot;keyword&quot;&gt;function&lt;/span&gt; &lt;span class=&quot;keyword&quot;&gt;List&lt;/span&gt;:map(f)
+   local ls = &lt;span class=&quot;keyword&quot;&gt;List&lt;/span&gt;.&lt;span class=&quot;keyword&quot;&gt;new&lt;/span&gt;()
+   &lt;span class=&quot;keyword&quot;&gt;for&lt;/span&gt; i=&lt;span class=&quot;number&quot;&gt;1&lt;/span&gt;,&lt;span class=&quot;comment&quot;&gt;#self do&lt;/span&gt;
+      ls:append(f(&lt;span class=&quot;keyword&quot;&gt;self&lt;/span&gt;[i]))
+   end
+   &lt;span class=&quot;keyword&quot;&gt;return&lt;/span&gt; ls
+end
+
+&lt;span class=&quot;keyword&quot;&gt;function&lt;/span&gt; &lt;span class=&quot;keyword&quot;&gt;List&lt;/span&gt;:join(delim,tostrfn)
+   delim = delim &lt;span class=&quot;keyword&quot;&gt;or&lt;/span&gt; &lt;span class=&quot;string&quot;&gt;''&lt;/span&gt;
+   tostrfn = tostrfn &lt;span class=&quot;keyword&quot;&gt;or&lt;/span&gt; tostring_q
+   &lt;span class=&quot;keyword&quot;&gt;return&lt;/span&gt; table.concat(&lt;span class=&quot;keyword&quot;&gt;self&lt;/span&gt;:map(tostrfn), delim)
+end
+
+&lt;span class=&quot;keyword&quot;&gt;function&lt;/span&gt; &lt;span class=&quot;keyword&quot;&gt;List&lt;/span&gt;:__tostring()
+   &lt;span class=&quot;keyword&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;string&quot;&gt;'{'&lt;/span&gt;..&lt;span class=&quot;keyword&quot;&gt;self&lt;/span&gt;:join(&lt;span class=&quot;string&quot;&gt;','&lt;/span&gt;)..&lt;span class=&quot;string&quot;&gt;'}'&lt;/span&gt;
+end&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Finally, we set a metatable on &lt;code&gt;List&lt;/code&gt; itself, to enable the use of &lt;code&gt;List&lt;/code&gt; as a constructor:
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;Lua&quot;&gt;setmetatable(&lt;span class=&quot;keyword&quot;&gt;List&lt;/span&gt;,{
+    __call = &lt;span class=&quot;keyword&quot;&gt;function&lt;/span&gt; (tbl,arg)
+       &lt;span class=&quot;keyword&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;keyword&quot;&gt;List&lt;/span&gt;.&lt;span class=&quot;keyword&quot;&gt;new&lt;/span&gt;(arg)
+    end,
+})&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Here are some test cases to verify that everything works as expected:
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;Lua&quot;&gt;local ls = &lt;span class=&quot;keyword&quot;&gt;List&lt;/span&gt;()
+assert(getmetatable(ls)==&lt;span class=&quot;keyword&quot;&gt;List&lt;/span&gt;)
+ls:push(&lt;span class=&quot;number&quot;&gt;1&lt;/span&gt;)
+ls:append(&lt;span class=&quot;string&quot;&gt;&quot;fire&quot;&lt;/span&gt;)
+ls:push(&lt;span class=&quot;number&quot;&gt;3.14&lt;/span&gt;)
+assert(ls:equals {&lt;span class=&quot;number&quot;&gt;1&lt;/span&gt;,&lt;span class=&quot;string&quot;&gt;&quot;fire&quot;&lt;/span&gt;,&lt;span class=&quot;number&quot;&gt;3.14&lt;/span&gt;})
+ls:extend(ls)
+assert(ls:equals {&lt;span class=&quot;number&quot;&gt;1&lt;/span&gt;,&lt;span class=&quot;string&quot;&gt;&quot;fire&quot;&lt;/span&gt;,&lt;span class=&quot;number&quot;&gt;3.14&lt;/span&gt;,&lt;span class=&quot;number&quot;&gt;1&lt;/span&gt;,&lt;span class=&quot;string&quot;&gt;&quot;fire&quot;&lt;/span&gt;,&lt;span class=&quot;number&quot;&gt;3.14&lt;/span&gt;})
+ls:insert(&lt;span class=&quot;number&quot;&gt;3&lt;/span&gt;,&lt;span class=&quot;string&quot;&gt;&quot;water&quot;&lt;/span&gt;)
+assert(ls:equals {&lt;span class=&quot;number&quot;&gt;1&lt;/span&gt;,&lt;span class=&quot;string&quot;&gt;&quot;fire&quot;&lt;/span&gt;,&lt;span class=&quot;string&quot;&gt;&quot;water&quot;&lt;/span&gt;,&lt;span class=&quot;number&quot;&gt;3.14&lt;/span&gt;,&lt;span class=&quot;number&quot;&gt;1&lt;/span&gt;,&lt;span class=&quot;string&quot;&gt;&quot;fire&quot;&lt;/span&gt;,&lt;span class=&quot;number&quot;&gt;3.14&lt;/span&gt;})
+ls:remove(&lt;span class=&quot;number&quot;&gt;1&lt;/span&gt;)
+ls:remove(&lt;span class=&quot;number&quot;&gt;4&lt;/span&gt;)
+assert(ls:equals {&lt;span class=&quot;string&quot;&gt;&quot;fire&quot;&lt;/span&gt;,&lt;span class=&quot;string&quot;&gt;&quot;water&quot;&lt;/span&gt;,&lt;span class=&quot;number&quot;&gt;3.14&lt;/span&gt;,&lt;span class=&quot;string&quot;&gt;&quot;fire&quot;&lt;/span&gt;,&lt;span class=&quot;number&quot;&gt;3.14&lt;/span&gt;})
+assert(tostring(ls)==&lt;span class=&quot;string&quot;&gt;'{&quot;fire&quot;,&quot;water&quot;,3.14,&quot;fire&quot;,3.14}'&lt;/span&gt;)
+ls:remove_value(&lt;span class=&quot;number&quot;&gt;3.14&lt;/span&gt;)
+assert(ls:equals {&lt;span class=&quot;string&quot;&gt;&quot;fire&quot;&lt;/span&gt;,&lt;span class=&quot;string&quot;&gt;&quot;water&quot;&lt;/span&gt;,&lt;span class=&quot;string&quot;&gt;&quot;fire&quot;&lt;/span&gt;,&lt;span class=&quot;number&quot;&gt;3.14&lt;/span&gt;})
+assert(ls:pop()==&lt;span class=&quot;number&quot;&gt;3.14&lt;/span&gt;)
+assert(ls:pop(&lt;span class=&quot;number&quot;&gt;2&lt;/span&gt;)==&lt;span class=&quot;string&quot;&gt;&quot;water&quot;&lt;/span&gt;)
+assert(ls:equals {&lt;span class=&quot;string&quot;&gt;&quot;fire&quot;&lt;/span&gt;,&lt;span class=&quot;string&quot;&gt;&quot;fire&quot;&lt;/span&gt;})
+assert(ls:count(&lt;span class=&quot;string&quot;&gt;&quot;fire&quot;&lt;/span&gt;)==&lt;span class=&quot;number&quot;&gt;2&lt;/span&gt;)
+assert(ls:count(&lt;span class=&quot;string&quot;&gt;&quot;water&quot;&lt;/span&gt;)==&lt;span class=&quot;number&quot;&gt;0&lt;/span&gt;)
+ls = &lt;span class=&quot;keyword&quot;&gt;List&lt;/span&gt;({&lt;span class=&quot;number&quot;&gt;1&lt;/span&gt;,&lt;span class=&quot;number&quot;&gt;6&lt;/span&gt;,&lt;span class=&quot;number&quot;&gt;3&lt;/span&gt;,&lt;span class=&quot;number&quot;&gt;8&lt;/span&gt;,&lt;span class=&quot;number&quot;&gt;10&lt;/span&gt;})
+ls:reverse()
+assert(ls:equals {&lt;span class=&quot;number&quot;&gt;10&lt;/span&gt;,&lt;span class=&quot;number&quot;&gt;8&lt;/span&gt;,&lt;span class=&quot;number&quot;&gt;3&lt;/span&gt;,&lt;span class=&quot;number&quot;&gt;6&lt;/span&gt;,&lt;span class=&quot;number&quot;&gt;1&lt;/span&gt;})
+local min,max = ls:minmax()
+assert(min==&lt;span class=&quot;number&quot;&gt;1&lt;/span&gt; &lt;span class=&quot;keyword&quot;&gt;and&lt;/span&gt; max==&lt;span class=&quot;number&quot;&gt;10&lt;/span&gt;)
+assert(ls:len()==&lt;span class=&quot;number&quot;&gt;5&lt;/span&gt;)
+&lt;span class=&quot;keyword&quot;&gt;clone&lt;/span&gt; = ls:&lt;span class=&quot;keyword&quot;&gt;clone&lt;/span&gt;()
+assert(&lt;span class=&quot;keyword&quot;&gt;clone&lt;/span&gt;==ls)
+&lt;span class=&quot;keyword&quot;&gt;clone&lt;/span&gt;[&lt;span class=&quot;number&quot;&gt;1&lt;/span&gt;]=&lt;span class=&quot;number&quot;&gt;20&lt;/span&gt;
+assert(&lt;span class=&quot;keyword&quot;&gt;clone&lt;/span&gt;~=ls)
+assert(ls:equals {&lt;span class=&quot;number&quot;&gt;10&lt;/span&gt;,&lt;span class=&quot;number&quot;&gt;8&lt;/span&gt;,&lt;span class=&quot;number&quot;&gt;3&lt;/span&gt;,&lt;span class=&quot;number&quot;&gt;6&lt;/span&gt;,&lt;span class=&quot;number&quot;&gt;1&lt;/span&gt;})
+assert(&lt;span class=&quot;keyword&quot;&gt;clone&lt;/span&gt;:equals {&lt;span class=&quot;number&quot;&gt;20&lt;/span&gt;,&lt;span class=&quot;number&quot;&gt;8&lt;/span&gt;,&lt;span class=&quot;number&quot;&gt;3&lt;/span&gt;,&lt;span class=&quot;number&quot;&gt;6&lt;/span&gt;,&lt;span class=&quot;number&quot;&gt;1&lt;/span&gt;})&lt;/code&gt;&lt;/pre&gt;
+&lt;h6&gt;Coroutines&lt;/h6&gt;
+&lt;p&gt;Coroutines are independent threads of execution inside a single Lua VM.
+
+&lt;/p&gt;
+&lt;p&gt;The coroutine API consists of the following functions:
+
+&lt;/p&gt;
+&lt;style&gt;
+  #coroutine-api td, #coroutine-api th {
+    vertical-align: top;
+  }
+&lt;/style&gt;
+
+&lt;table id=&quot;coroutine-api&quot;&gt;
+  &lt;tr&gt;
+    &lt;th&gt;API function&lt;/th&gt;
+    &lt;th&gt;Purpose&lt;/th&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+    &lt;td&gt;&lt;code&gt;coroutine.create(f)&lt;/code&gt;&lt;/td&gt;
+    &lt;td&gt;create a new coroutine (&lt;code&gt;f&lt;/code&gt; will be its main function)&lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+    &lt;td&gt;&lt;code&gt;coroutine.resume(co,...)&lt;/code&gt;&lt;/td&gt;
+    &lt;td&gt;start/resume a coroutine&lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+    &lt;td&gt;&lt;code&gt;coroutine.running()&lt;/code&gt;&lt;/td&gt;
+    &lt;td&gt;returns the currently running coroutine (&lt;code&gt;nil&lt;/code&gt; when called by the main thread)&lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+    &lt;td&gt;&lt;code&gt;coroutine.status(co)&lt;/code&gt;&lt;/td&gt;
+    &lt;td&gt;&lt;code&gt;&quot;running&quot;&lt;/code&gt; / &lt;code&gt;&quot;suspended&quot;&lt;/code&gt; / &lt;code&gt;&quot;normal&quot;&lt;/code&gt; / &lt;code&gt;&quot;dead&quot;&lt;/code&gt;&lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+    &lt;td&gt;&lt;code&gt;coroutine.wrap(f)&lt;/code&gt;&lt;/td&gt;
+    &lt;td&gt;create a coroutine and wrap it inside a function which resumes it when called&lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+    &lt;td&gt;&lt;code&gt;coroutine.yield(...)&lt;/code&gt;&lt;/td&gt;
+    &lt;td&gt;suspends execution of the current coroutine&lt;/td&gt;
+  &lt;/tr&gt;
+&lt;/table&gt;
+
+&lt;p&gt;A coroutine created with &lt;code&gt;coroutine.create(f)&lt;/code&gt; is initially in the &lt;code&gt;&quot;suspended&quot;&lt;/code&gt; state. You can start it with &lt;code&gt;coroutine.resume(co,...)&lt;/code&gt;, which is similar to a simple call of its main function &lt;code&gt;f&lt;/code&gt;. The difference is that normal functions can only return by invoking &lt;code&gt;return&lt;/code&gt; or &lt;code&gt;error&lt;/code&gt; (implicitly or explicitly), while coroutines can also return with &lt;code&gt;coroutine.yield(...)&lt;/code&gt; and do that from any location in &lt;code&gt;f&lt;/code&gt;&apos;s call graph.
+
+&lt;/p&gt;
+&lt;p&gt;Upon the execution of &lt;code&gt;coroutine.yield(...)&lt;/code&gt;, the state of the current coroutine gets &quot;frozen&quot; and control gets back to the code which executed &lt;code&gt;coroutine.resume&lt;/code&gt;. The arguments passed to &lt;code&gt;coroutine.yield(...)&lt;/code&gt; are returned by &lt;code&gt;coroutine.resume&lt;/code&gt; in the same way as values passed to a simple &lt;code&gt;return&lt;/code&gt; statement are returned by the corresponding function call.
+
+&lt;/p&gt;
+&lt;p&gt;Coroutines that have yielded can be continued exactly at the point where they yielded by calling &lt;code&gt;coroutine.resume&lt;/code&gt; again. The extra arguments passed to &lt;code&gt;coroutine.resume(co,...)&lt;/code&gt; become return values of the corresponding &lt;code&gt;coroutine.yield(...)&lt;/code&gt; call inside the coroutine.
+
+&lt;/p&gt;
+&lt;p&gt;A coroutine that has been resumed can call &lt;code&gt;coroutine.resume&lt;/code&gt; itself. A coroutine that is waiting for its own &lt;code&gt;coroutine.resume&lt;/code&gt; call to return (or yield) is in the &lt;code&gt;&quot;normal&quot;&lt;/code&gt; state (= active but not &lt;code&gt;&quot;running&quot;&lt;/code&gt;). A &lt;code&gt;&quot;dead&quot;&lt;/code&gt; coroutine is one which finished execution, either normally (main function returned) or because of an error.
+
+&lt;/p&gt;
+&lt;p&gt;The purpose - ok, one possible purpose - of &lt;code&gt;coroutine.wrap&lt;/code&gt; is to create a function suitable for use as an iterator in a &lt;code&gt;for..in&lt;/code&gt; loop. Using &lt;code&gt;coroutine.yield&lt;/code&gt;, the iterator function doesn&apos;t have to adapt to the idiosyncrasies of the &lt;code&gt;for..in&lt;/code&gt; loop: it can just gather the values and yield them one by one as they arrive.
+
+&lt;/p&gt;
+&lt;p&gt;Hopefully all of this will become reasonably clear after studying the following - rather elaborate - code example:
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;Lua&quot;&gt;local &lt;span class=&quot;keyword&quot;&gt;function&lt;/span&gt; _dirfiles(dir)
+   local dirs = {}
+   local files = {}
+   local append = table.insert
+   &lt;span class=&quot;keyword&quot;&gt;for&lt;/span&gt; f in ldir(dir) &lt;span class=&quot;keyword&quot;&gt;do&lt;/span&gt;
+      &lt;span class=&quot;keyword&quot;&gt;if&lt;/span&gt; f ~= &lt;span class=&quot;string&quot;&gt;'.'&lt;/span&gt; &lt;span class=&quot;keyword&quot;&gt;and&lt;/span&gt; f ~= &lt;span class=&quot;string&quot;&gt;'..'&lt;/span&gt; then
+         local p = path.join(dir,f)
+         local mode = path.attrib(p,&lt;span class=&quot;string&quot;&gt;'mode'&lt;/span&gt;)
+         &lt;span class=&quot;keyword&quot;&gt;if&lt;/span&gt; mode==&lt;span class=&quot;string&quot;&gt;'directory'&lt;/span&gt; then
+            append(dirs,f)
+         &lt;span class=&quot;keyword&quot;&gt;else&lt;/span&gt;
+            append(files,f)
+         end
+      end
+   end
+   &lt;span class=&quot;keyword&quot;&gt;return&lt;/span&gt; dirs,files
+end&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;This helper function takes the path of a  directory, scans this directory and returns the names of directories and files it finds as a pair of tables.
+
+&lt;/p&gt;
+&lt;p&gt;The &lt;code&gt;ldir&lt;/code&gt;, &lt;code&gt;path.join&lt;/code&gt; and &lt;code&gt;path.attrib&lt;/code&gt; functions are not standard Lua: &lt;code&gt;ldir(dir)&lt;/code&gt; returns an iterator for directory entries in &lt;code&gt;dir&lt;/code&gt;, &lt;code&gt;path.join&lt;/code&gt; joins its arguments (path components) using the default path separator, and &lt;code&gt;path.attrib(p,&apos;mode&apos;)&lt;/code&gt; returns &lt;code&gt;&apos;directory&apos;&lt;/code&gt; or &lt;code&gt;&apos;file&apos;&lt;/code&gt; depending on the type of &lt;code&gt;p&lt;/code&gt;.
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;Lua&quot;&gt;local &lt;span class=&quot;keyword&quot;&gt;function&lt;/span&gt; _walker(root)
+   local dirs,files = _dirfiles(root)
+   &lt;span class=&quot;keyword&quot;&gt;for&lt;/span&gt; i,d in ipairs(dirs) &lt;span class=&quot;keyword&quot;&gt;do&lt;/span&gt;
+      _walker(path.join(root,d))
+   end
+   coroutine.yield(root,dirs,files)
+end
+
+&lt;span class=&quot;keyword&quot;&gt;function&lt;/span&gt; walk(root)
+   &lt;span class=&quot;keyword&quot;&gt;return&lt;/span&gt; coroutine.wrap(&lt;span class=&quot;keyword&quot;&gt;function&lt;/span&gt; () _walker(root) end)
+end&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;The &lt;code&gt;walk&lt;/code&gt; function takes a directory path and returns an iterator (actually a wrapped coroutine) which can be used to go over all files and directories under this path, recursively.
+
+&lt;/p&gt;
+&lt;p&gt;Let&apos;s see how we could use &lt;code&gt;walk&lt;/code&gt; in practice:
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;Lua&quot;&gt;&lt;span class=&quot;keyword&quot;&gt;function&lt;/span&gt; rmtree(fullpath)
+   &lt;span class=&quot;keyword&quot;&gt;for&lt;/span&gt; root,dirs,files in walk(fullpath) &lt;span class=&quot;keyword&quot;&gt;do&lt;/span&gt;
+      &lt;span class=&quot;keyword&quot;&gt;for&lt;/span&gt; i,f in ipairs(files) &lt;span class=&quot;keyword&quot;&gt;do&lt;/span&gt;
+         remove(path.join(root,f))
+      end
+      rmdir(root)
+   end
+end&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;The &lt;code&gt;rmtree&lt;/code&gt; function does the same as what &lt;code&gt;rm -rf&lt;/code&gt; would do in a shell. &lt;code&gt;remove&lt;/code&gt; removes a file, &lt;code&gt;rmdir&lt;/code&gt; removes a non-empty directory (these are not standard Lua).
+
+&lt;/p&gt;
+&lt;p&gt;The iterator &lt;code&gt;walk(fullpath)&lt;/code&gt; returns a &lt;code&gt;root,dirs,files&lt;/code&gt; tuple for every directory it encounters. As &lt;code&gt;rmdir&lt;/code&gt; can remove &lt;code&gt;root&lt;/code&gt; only if it&apos;s empty, we have to return (and remove) the files on the bottom level first (this is known as depth-first search). If we wanted to visit directories in a top-down fashion instead (also known as breadth-first search), we&apos;d have to change the position of the yield in &lt;code&gt;_walker&lt;/code&gt;&apos;s code:
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;Lua&quot;&gt;local &lt;span class=&quot;keyword&quot;&gt;function&lt;/span&gt; _walker(root)
+   local dirs,files = _dirfiles(root)
+   coroutine.yield(root,dirs,files)
+   &lt;span class=&quot;keyword&quot;&gt;for&lt;/span&gt; i,d in ipairs(dirs) &lt;span class=&quot;keyword&quot;&gt;do&lt;/span&gt;
+      _walker(path.join(root,d))
+   end
+end&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Contemplate this until you see the light.
+
+&lt;/p&gt;
+&lt;p&gt;Here is an all-in-one example for the same thing, approached from a slightly different angle:
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;Lua&quot;&gt;&lt;span class=&quot;keyword&quot;&gt;function&lt;/span&gt; dirtree(d)
+   local exists, isdir = path.exists, path.isdir
+   local sep = path.sep
+
+   local &lt;span class=&quot;keyword&quot;&gt;function&lt;/span&gt; yieldtree(dir)
+      &lt;span class=&quot;keyword&quot;&gt;for&lt;/span&gt; entry in ldir(dir) &lt;span class=&quot;keyword&quot;&gt;do&lt;/span&gt;
+         &lt;span class=&quot;keyword&quot;&gt;if&lt;/span&gt; entry ~= &lt;span class=&quot;string&quot;&gt;&quot;.&quot;&lt;/span&gt; &lt;span class=&quot;keyword&quot;&gt;and&lt;/span&gt; entry ~= &lt;span class=&quot;string&quot;&gt;&quot;..&quot;&lt;/span&gt; then
+            entry = dir .. sep .. entry
+            &lt;span class=&quot;keyword&quot;&gt;if&lt;/span&gt; exists(entry) then  -- Just in &lt;span class=&quot;keyword&quot;&gt;case&lt;/span&gt; a symlink is broken.
+               local is_dir = isdir(entry)
+               yield(entry,is_dir)
+               &lt;span class=&quot;keyword&quot;&gt;if&lt;/span&gt; is_dir then
+                  yieldtree(entry)
+               end
+            end
+         end
+      end
+   end
+
+   &lt;span class=&quot;keyword&quot;&gt;return&lt;/span&gt; coroutine.wrap(&lt;span class=&quot;keyword&quot;&gt;function&lt;/span&gt;() yieldtree(d) end)
+end&lt;/code&gt;&lt;/pre&gt;
+&lt;h6&gt;Chunks&lt;/h6&gt;
+&lt;p&gt;Before discussing our last topic - the module system -, I must introduce you to the concept of &lt;em&gt;chunks&lt;/em&gt;.
+
+&lt;/p&gt;
+&lt;p&gt;In Lua, there are three functions that deal with loading (and possibly executing) source code:
+
+&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;&lt;code&gt;dofile(filename)&lt;/code&gt; loads the given file, compiles it into a chunk and executes it&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;loadfile(filename)&lt;/code&gt; loads the given file, compiles it and returns it as a chunk&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;loadstring(string)&lt;/code&gt; compiles the given string and returns it as a chunk&lt;/li&gt;
+&lt;/ol&gt;
+&lt;p&gt;(There is also the lower-level &lt;code&gt;load(func)&lt;/code&gt; which can be used to load the source code incrementally, in pieces.)
+
+&lt;/p&gt;
+&lt;p&gt;The code obtained from any of these sources gets compiled as if it were the body of an anonymous function, and the resulting function is called a &lt;em&gt;chunk&lt;/em&gt;.
+
+&lt;/p&gt;
+&lt;p&gt;As an example, if you create a file &lt;code&gt;chunk.lua&lt;/code&gt; with the following contents:
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;Lua&quot;&gt;&lt;span class=&quot;keyword&quot;&gt;function&lt;/span&gt; add(x,y) &lt;span class=&quot;keyword&quot;&gt;return&lt;/span&gt; x+y end
+&lt;span class=&quot;keyword&quot;&gt;function&lt;/span&gt; mul(x,y) &lt;span class=&quot;keyword&quot;&gt;return&lt;/span&gt; x*y end
+
+local a,b = ...
+&lt;span class=&quot;keyword&quot;&gt;return&lt;/span&gt; add(a,b),mul(a,b)&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Then you can compile it into a chunk and then call it like this:
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;Lua&quot;&gt;local f = loadfile(&quot;chunk.lua&quot;)
+local res = {f(3,4)}
+assert(res[1]==7)
+assert(res[2]==12)&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Note: the functions &lt;code&gt;add&lt;/code&gt; and &lt;code&gt;mul&lt;/code&gt; spring into existence when we call &lt;code&gt;f&lt;/code&gt;: their prototypes - which were compiled when &lt;code&gt;chunk.lua&lt;/code&gt; was parsed - are instantiated into two closures which are bound into the global environment under the &lt;code&gt;add&lt;/code&gt; and &lt;code&gt;mul&lt;/code&gt; keys.
+
+&lt;/p&gt;
+&lt;p&gt;As you see, a chunk can take arguments - through &lt;code&gt;...&lt;/code&gt; - and return values just like any ordinary function.
+
+&lt;/p&gt;
+&lt;h6&gt;Modules&lt;/h6&gt;
+&lt;p&gt;In Lua, modules - also known as packages or namespaces - are implemented as tables.
+
+&lt;/p&gt;
+&lt;p&gt;The source code of a module is placed into a separate source file (typically &lt;code&gt;&lt;modname&gt;.lua&lt;/code&gt;).
+
+&lt;/p&gt;
+&lt;p&gt;The module file looks something like this:
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;Lua&quot;&gt;-- mymodule.lua
+
+local mymodule = {}
+
+&lt;span class=&quot;keyword&quot;&gt;function&lt;/span&gt; mymodule.f() ... end
+&lt;span class=&quot;keyword&quot;&gt;function&lt;/span&gt; mymodule.g() ... end
+&lt;span class=&quot;keyword&quot;&gt;function&lt;/span&gt; mymodule.h() ... end
+
+&lt;span class=&quot;keyword&quot;&gt;return&lt;/span&gt; mymodule&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;and imported like this (in first approximation):
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;Lua&quot;&gt;local mymodule = dofile(&quot;mymodule.lua&quot;)
+mymodule.g()&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;The problem with this approach is that modules are not cached: any time you &lt;code&gt;dofile&lt;/code&gt; them, they are loaded and executed again.
+
+&lt;/p&gt;
+&lt;p&gt;Lua provides the following mechanism to deal with this:
+
+&lt;/p&gt;
+&lt;p&gt;The global table &lt;code&gt;package.loaded&lt;/code&gt; contains already loaded modules (module name =&gt; return value of module chunk).
+
+&lt;/p&gt;
+&lt;p&gt;The global function &lt;code&gt;require(modname)&lt;/code&gt; checks whether the module has been already loaded. If it finds a value at &lt;code&gt;package.loaded[modname]&lt;/code&gt;, that value is returned. Otherwise it tries to load module &lt;code&gt;modname&lt;/code&gt; using a set of &lt;em&gt;loaders&lt;/em&gt; (see the &lt;a href=&quot;http://www.lua.org/manual/5.1/manual.html#5.3&quot;&gt;manual&lt;/a&gt; for details). If the load succeeds, the module chunk is executed and the result value is placed into &lt;code&gt;package.loaded[modname]&lt;/code&gt;. Finally, the value at &lt;code&gt;package.loaded[modname]&lt;/code&gt; is returned to the caller.
+
+&lt;/p&gt;
+&lt;p&gt;There is one last little detail to be aware of: the &lt;code&gt;package.path&lt;/code&gt; variable which tells &lt;code&gt;require&lt;/code&gt; where it should look for modules:
+
+&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;Lua&quot;&gt;./?.lua;/usr/share/luajit-2.0.0/?.lua;/usr/local/share/lua/5.1/?.lua;/usr/local/share/lua/5.1/?/init.lua;/usr/share/lua/5.1/?.lua;/usr/share/lua/5.1/?/init.lua&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;(This is LuaJIT&apos;s default value on my machine.)
+
+&lt;/p&gt;
+&lt;p&gt;&lt;code&gt;require(modname)&lt;/code&gt; splits this string at &lt;code&gt;;&lt;/code&gt; separators to get a list of paths to try, and replaces each &lt;code&gt;?&lt;/code&gt; with &lt;code&gt;modname&lt;/code&gt;.
+
+&lt;/p&gt;
+&lt;p&gt;Relative paths are relative to the current working directory (&lt;em&gt;not&lt;/em&gt; to the location of the source file calling &lt;code&gt;require&lt;/code&gt;).
+
+&lt;/p&gt;
+&lt;h5&gt;Tying loose ends&lt;/h5&gt;
+&lt;p&gt;If you want to get a complete picture of Lua, read up on the following topics in the &lt;a href=&quot;http://www.lua.org/manual/5.1/manual.html&quot;&gt;Lua manual&lt;/a&gt;:
+
+&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;bracketed (long) comments and string literals&lt;/li&gt;
+&lt;li&gt;numeric literals formats (decimal, scientific, hex)&lt;/li&gt;
+&lt;li&gt;rules of automatic coercion between strings and numbers&lt;/li&gt;
+&lt;li&gt;the necessity of explicit blocks for &lt;code&gt;return&lt;/code&gt; and &lt;code&gt;break&lt;/code&gt; (when used in the middle of another block)&lt;/li&gt;
+&lt;li&gt;interpolation of function return values and &lt;code&gt;...&lt;/code&gt;&lt;ul&gt;
+&lt;li&gt;in the middle of a list&lt;/li&gt;
+&lt;li&gt;at the end of a list&lt;/li&gt;
+&lt;li&gt;within parentheses&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/li&gt;
+&lt;li&gt;the lack of automatic type conversion in equality comparisons&lt;/li&gt;
+&lt;li&gt;the exact semantics of the &lt;code&gt;#&lt;/code&gt; (length-of) operator when used on tables&lt;/li&gt;
+&lt;li&gt;precedence of operators&lt;/li&gt;
+&lt;li&gt;tail calls&lt;/li&gt;
+&lt;li&gt;the exact semantics of metatables and metamethods&lt;/li&gt;
+&lt;li&gt;garbage collection, weak tables&lt;/li&gt;
+&lt;li&gt;standard libraries&lt;/li&gt;
+&lt;li&gt;the C API (not really needed as LuaJIT has a great FFI)&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;In the next part, I will introduce the LuaJIT FFI by building an example application which binds to the EGL and OpenVG libraries to draw something tangible on the screen.
+
+&lt;/p&gt;
+&lt;p&gt;Stay tuned.
+&lt;/p&gt;
+</description>
+    </item>
     <item>
       <title>DIY Linux with Buildroot [2/2]</title>
       <link>http://cellux.github.com/articles/diy-linux-with-buildroot-part-2/</link>
@@ -547,6 +1765,10 @@ tar xvzf buildroot-&lt;span class=&quot;number&quot;&gt;2012.11&lt;/span&gt;.&lt
     &lt;td&gt;&lt;code&gt;YES&lt;/code&gt;&lt;/td&gt;
   &lt;/tr&gt;
   &lt;tr&gt;
+    &lt;th&gt;Enable RPC support&lt;/th&gt;
+    &lt;td&gt;&lt;code&gt;YES&lt;/code&gt;&lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
     &lt;th&gt;Enable WCHAR support&lt;/th&gt;
     &lt;td&gt;&lt;code&gt;YES&lt;/code&gt;&lt;/td&gt;
   &lt;/tr&gt;
@@ -556,7 +1778,7 @@ tar xvzf buildroot-&lt;span class=&quot;number&quot;&gt;2012.11&lt;/span&gt;.&lt
   &lt;/tr&gt;
 &lt;/table&gt;
 
-&lt;p&gt;These seemed like a good idea (and without them, certain packages cannot be selected).
+&lt;p&gt;These seemed like a good idea (and without them, certain packages cannot be selected). RPC is needed only if you want to mount NFS filesystems to the Pi.
 
 &lt;/p&gt;
 &lt;h6&gt;System configuration&lt;/h6&gt;
@@ -603,7 +1825,11 @@ tar xvzf buildroot-&lt;span class=&quot;number&quot;&gt;2012.11&lt;/span&gt;.&lt
 &lt;p&gt;&lt;a href=&quot;http://www.busybox.net/&quot;&gt;Busybox&lt;/a&gt; - which is enabled by default - gives us a fairly complete userland, so the only extra you should enable here is &lt;a href=&quot;https://matt.ucc.asn.au/dropbear/dropbear.html&quot;&gt;dropbear&lt;/a&gt;, a small SSH server under &lt;code&gt;Networking applications&lt;/code&gt; which will let us log in remotely.
 
 &lt;/p&gt;
+&lt;p&gt;Also, if you want to mount NFS filesystems, you should enable &lt;code&gt;Networking applications&lt;/code&gt; / &lt;code&gt;Portmap&lt;/code&gt;.
+
+&lt;/p&gt;
 &lt;p&gt;You may select other packages too, as you see fit.
+
 
 &lt;/p&gt;
 &lt;h6&gt;Filesystem images&lt;/h6&gt;

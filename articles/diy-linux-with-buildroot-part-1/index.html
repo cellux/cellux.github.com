@@ -10,7 +10,7 @@
     <link rel="stylesheet" href="/css/960.css">
     <link rel="stylesheet" href="/css/fbg.css">
     <link rel="stylesheet" href="/css/main.css">
-    <script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/jquery/1/jquery.js"></script>
+    <script type="text/javascript" src="/js/jquery-1.9.0.min.js"></script>
     <script type="text/javascript" src="/js/galleria-1.2.8.min.js"></script>
     <script type="text/javascript" src="/js/main.js"></script>
   </head>
@@ -22,7 +22,7 @@
         <div class="clear"></div>
         <div class="grid_12">
           <div><img id="head-sep" src="/images/sep.png"></div>
-          <div id="nav" style="float:right;"><a href="/articles/my-first-day-with-the-raspberry-pi/"><img src="/images/nav-first.png" style="left: 0px"></a><a href="/articles/moving-to-nfs-root/"><img src="/images/nav-prev.png" style="left: 25px"></a><a href="/archive.html"><img src="/images/nav-list.png" style="left: 50px"></a><a href="/articles/diy-linux-with-buildroot-part-2/"><img src="/images/nav-next.png" style="left: 75px"></a><a href="/articles/diy-linux-with-buildroot-part-2/"><img src="/images/nav-last.png" style="left: 100px"></a></div>
+          <div id="nav" style="float:right"><a href="/articles/my-first-day-with-the-raspberry-pi/" title="First post"><img src="/images/nav-first.png" style="left: 0px; visibility: visible;"></a><a href="/articles/moving-to-nfs-root/" title="Previous post"><img src="/images/nav-prev.png" style="left: 25px; visibility: visible;"></a><a href="/archive.html" title="List of articles"><img src="/images/nav-list.png" style="left: 50px; visibility: visible;"></a><a href="/articles/diy-linux-with-buildroot-part-2/" title="Next post"><img src="/images/nav-next.png" style="left: 75px; visibility: visible;"></a><a href="/articles/introduction-to-luajit-part-1/" title="Last post"><img src="/images/nav-last.png" style="left: 100px; visibility: visible;"></a></div>
         </div>
         <div class="clear"></div>
       </header>
@@ -166,6 +166,10 @@ tar xvzf buildroot-<span class="number">2012.11</span>.<span class="number">1</s
     <td><code>YES</code></td>
   </tr>
   <tr>
+    <th>Enable RPC support</th>
+    <td><code>YES</code></td>
+  </tr>
+  <tr>
     <th>Enable WCHAR support</th>
     <td><code>YES</code></td>
   </tr>
@@ -175,7 +179,7 @@ tar xvzf buildroot-<span class="number">2012.11</span>.<span class="number">1</s
   </tr>
 </table>
 
-<p>These seemed like a good idea (and without them, certain packages cannot be selected).
+<p>These seemed like a good idea (and without them, certain packages cannot be selected). RPC is needed only if you want to mount NFS filesystems to the Pi.
 
 </p>
 <h6>System configuration</h6>
@@ -222,7 +226,11 @@ tar xvzf buildroot-<span class="number">2012.11</span>.<span class="number">1</s
 <p><a href="http://www.busybox.net/">Busybox</a> - which is enabled by default - gives us a fairly complete userland, so the only extra you should enable here is <a href="https://matt.ucc.asn.au/dropbear/dropbear.html">dropbear</a>, a small SSH server under <code>Networking applications</code> which will let us log in remotely.
 
 </p>
+<p>Also, if you want to mount NFS filesystems, you should enable <code>Networking applications</code> / <code>Portmap</code>.
+
+</p>
 <p>You may select other packages too, as you see fit.
+
 
 </p>
 <h6>Filesystem images</h6>

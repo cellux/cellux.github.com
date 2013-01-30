@@ -1,0 +1,1252 @@
+<!DOCTYPE html>
+<html lang="en">
+  <!-- hi visitor! if you need my e-mail address, execute show_me_your_email_address() in your favorite web console. -->
+  <head>
+    <meta charset="utf-8">
+    <title>Introduction to LuaJIT [1/2] - Raspberry Pie
+    </title>
+    <link rel="alternate" href="http://cellux.github.com/feed.xml" type="application/rss+xml" title="My personal adventures in the world of the Raspberry Pi">
+    <link rel="stylesheet" href="/css/normalize.css">
+    <link rel="stylesheet" href="/css/960.css">
+    <link rel="stylesheet" href="/css/fbg.css">
+    <link rel="stylesheet" href="/css/main.css">
+    <script type="text/javascript" src="/js/jquery-1.9.0.min.js"></script>
+    <script type="text/javascript" src="/js/galleria-1.2.8.min.js"></script>
+    <script type="text/javascript" src="/js/main.js"></script>
+  </head>
+  <body>
+    <div class="container_12">
+      <header>
+        <div class="grid_4"><img src="/images/raspberry_184px.jpg" width="215px" height="184px"></div>
+        <div class="grid_7 suffix_1"><img src="/images/adventures_in_the_world_of_the_raspberry_pi.png" style="float: right; margin-top: 161px;"></div>
+        <div class="clear"></div>
+        <div class="grid_12">
+          <div><img id="head-sep" src="/images/sep.png"></div>
+          <div id="nav" style="float:right"><a href="/articles/my-first-day-with-the-raspberry-pi/" title="First post"><img src="/images/nav-first.png" style="left: 0px; visibility: visible;"></a><a href="/articles/diy-linux-with-buildroot-part-2/" title="Previous post"><img src="/images/nav-prev.png" style="left: 25px; visibility: visible;"></a><a href="/archive.html" title="List of articles"><img src="/images/nav-list.png" style="left: 50px; visibility: visible;"></a><a href="#" title="Next post"><img src="/images/nav-next.png" style="left: 75px; visibility: hidden;"></a><a href="/articles/introduction-to-luajit-part-1/" title="Last post"><img src="/images/nav-last.png" style="left: 100px; visibility: hidden;"></a></div>
+        </div>
+        <div class="clear"></div>
+      </header>
+      <div id="content">
+        <article class="post">
+          <h4>Introduction to LuaJIT [1/2]</h4>
+          <section class="content"><p>Now that we have <a href="http://cellux.github.com/articles/diy-linux-with-buildroot-part-1/">our own Linux system</a> to work on, we can start writing programs for the Pi.
+
+</p>
+<p>After much investigation, I decided to write these programs in <a href="http://www.lua.org/">Lua</a> - more exactly <a href="http://www.luajit.org/">LuaJIT</a>, a highly optimized implementation of the original Lua 5.1 VM developed by a single person, Mike Pall, who - based on his work - seems to be nothing short of a genius. This guy implemented a just-in-time compiler for Lua which can compile Lua bytecode straight into optimized machine code on the x86/x64, PPC, MIPS <em>and ARM</em> architectures. Furthermore, he added an excellent foreign function interface which makes it a breeze to interface Lua code with C libraries.
+
+</p>
+<p>As LuaJIT is already included in the Buildroot distribution, it takes just the flip of a switch to install it into our root fs (see my <a href="http://cellux.github.com/articles/diy-linux-with-buildroot-part-1/">Buildroot article</a> for details). There is one catch though: Buildroot 2012.11.1 contains a late beta version of LuaJIT, not the final 2.0.0. If you want the final version, you should clone the <a href="git://git.buildroot.net/buildroot">Buildroot GitHub repository</a> and replace the <code>buildroot-2012.11.1/package/luajit</code> folder with the version from the master branch before running <code>make</code>.
+
+</p>
+<p>The LuaJIT package installs the following files to the root fs:
+
+</p>
+<pre><code>/usr/bin/luajit
+/usr/lib/libluajit-5.1.so
+/usr/share/luajit-2.0.0/jit/bc.lua
+/usr/share/luajit-2.0.0/jit/bcsave.lua
+/usr/share/luajit-2.0.0/jit/dis_arm.lua
+/usr/share/luajit-2.0.0/jit/dis_mipsel.lua
+/usr/share/luajit-2.0.0/jit/dis_mips.lua
+/usr/share/luajit-2.0.0/jit/dis_ppc.lua
+/usr/share/luajit-2.0.0/jit/dis_x64.lua
+/usr/share/luajit-2.0.0/jit/dis_x86.lua
+/usr/share/luajit-2.0.0/jit/dump.lua
+/usr/share/luajit-2.0.0/jit/v.lua
+/usr/share/luajit-2.0.0/jit/vmdef.lua</code></pre>
+<p>From these, <code>libluajit-5.1.so</code> plays the central role: this ~500kb library contains the complete Lua interpreter, compiler, standard library and foreign function interface. If we had the necessary header files, we could use this library from C like this:
+
+</p>
+<pre><code class="C"><span class="comment">#include &lt;stdio.h></span>
+<span class="comment">#include &lt;luajit-2.0/lua.h></span>
+<span class="comment">#include &lt;luajit-2.0/lauxlib.h></span>
+
+int main (int argc, char **argv) {
+  <span class="keyword">if</span> (argc > <span class="number">1</span>) {
+    lua_State *L = luaL_newstate();
+    luaL_openlibs(L);
+    luaL_dostring(L, argv[<span class="number">1</span>]);
+    lua_close(L);
+  }
+  <span class="keyword">else</span> {
+    fprintf(stderr, <span class="string">"Usage: %s [lua-code]\n"</span>, argv[<span class="number">0</span>]);
+  }
+}</code></pre>
+<p><code>luaL_newstate</code> creates a new Lua VM instance, <code>luaL_openlibs</code> makes the standard library available to code running in this VM, <code>luaL_dostring</code> compiles the program given in its second parameter (a C string) to Lua bytecode - probably machine code in the case of LuaJIT! - and then executes it. <code>lua_close</code> destroys the VM instance and takes care of cleanup.
+
+</p>
+<p>Variables defined in Lua may be accessed from C through an easy-to-use API. The programmer can also make C functions and data structures available in Lua. A frequently used pattern is to separate the codebase into two parts: a C/C++ part provides a set of low-level components (like objects of a 3D engine), while the Lua part glues these components together into the desired app.
+
+</p>
+<p>The application&apos;s startup code may look like this:
+
+</p>
+<ol>
+<li>Load and initialize low-level C/C++ components, bind them into the Lua VM</li>
+<li>Load and execute a <code>main()</code> function implemented in Lua</li>
+</ol>
+<p>In sophisticated systems, the Lua side may open a network socket and listen for connections from the developer. Through this socket the programmer can send in Lua code which is instantly compiled and executed in the context of the running app. Functions of the app thus may be replaced in real-time - while the app is running - which provides a great environment for experimentation.
+
+</p>
+<p>The <code>/usr/bin/luajit</code> binary is a simple C frontend to <code>libluajit-5.1.so</code>: it provides a REPL (read-eval-print loop) and can also run a Lua script file if we pass one as an argument.
+
+</p>
+<p>The files under <code>/usr/share/luajit-2.0.0/jit</code> are part of LuaJIT&apos;s <code>jit</code> library, which provides a Lua API to the JIT compiler. Through this lib we can control the JIT, disassemble Lua bytecode (and the machine code generated from it) or get a human-readable dump of the code in its various stages as it progresses through the JIT compiler.
+
+</p>
+<h5>A tour of the language</h5>
+<p>In the rest of this article I will attempt to give a concise introduction to Lua. For further details - and a description of the C API which I won&apos;t discuss here -, I highly recommend reading the <a href="http://www.lua.org/manual/5.1/manual.html">Lua 5.1 manual</a> (a work of art in itself - on par with the <a href="http://schemers.org/Documents/Standards/R5RS/">R5RS standard</a> if you know what I mean).
+
+</p>
+<p>Lua is a &quot;polyglot&quot; language: you can write Lua programs in procedural, object oriented or functional style - most likely mixing and matching these approaches as you go. It has all the usual control structures: <em>if..then..elseif..end</em>, <em>while..do..end</em>, <em>repeat..until</em> and two variants of the <em>for</em> loop. It has <em>booleans</em> - <code>true</code> and <code>false</code>, <em>numbers</em> - which correspond to C doubles, <em>strings</em> - 8-bit clean, counted byte arrays and <em>tables</em> - used to implement arrays, maps, records, trees, objects and modules. There is also the special value <em>nil</em> - a singleton value serving the same role as <em>None</em> in Python or <em>NULL</em> in Java (meaning &quot;no value&quot;).
+
+</p>
+<p><em>Functions</em> in Lua are first-class values: they can be created with literals, stored in variables and passed to functions as arguments. <em>Threads</em> (aka coroutines) allow several independent threads of execution inside a single Lua VM. These are not OS-level threads: there is no built-in scheduler to pre-empt them, so from time to time they must voluntarily give up control using the <code>coroutine.yield()</code> function. (The same model was used in <a href="http://en.wikipedia.org/wiki/Scheduling_%28computing%29#Windows">Windows 3.1</a> to implement multitasking.)
+
+</p>
+<p>The last two types - <em>userdata</em> and <em>lightuserdata</em> - are used to represent C data structures and plain pointers on the Lua side.
+
+</p>
+<p>Lua has the four standard arithmetic operators (<code>+</code>, <code>-</code>, <code>*</code>, <code>/</code>), a modulo operator (<code>%</code>), exponentiation (<code>^</code>) and a prefix &quot;length-of&quot; operator (<code>#</code>). Comparison can be done using <code>==</code>, <code>&lt;</code>, <code>&gt;</code>, <code>&lt;=</code> and <code>&gt;=</code>. The &quot;not-equal&quot; operator is <code>~=</code> (not <span style="font-family: monospace">!=</span>). Booleans and numbers are compared by value. Tables, functions, threads and userdata are considered equal if they reference the same object on the Lua heap. Strings are special: they are interned in a string table (a hash map) which <a href="http://www.lua.org/source/5.1/lstring.c.html#luaS_newlstr">guarantees</a> that any given string encountered during execution gets stored in memory only once. This means that after
+
+</p>
+<pre><code class="Lua">a = "hello, world"
+b = "hello, world"</code></pre>
+<p>both <code>a</code> and <code>b</code> reference the same string value. Comparison of two strings thus boils down to a <a href="http://www.lua.org/source/5.1/lvm.c.html#luaV_equalval">simple pointer comparison</a>. As a result, we can use strings for the same purpose we would use enums in C or C++ without causing speed loss or significant memory bloat.
+
+</p>
+<p>In the following sections I will illustrate various areas (and idioms) of the language using small code snippets mostly originating from Steve Donovan&apos;s <a href="http://github.com/stevedonovan/Penlight/">Penlight</a>, a comprehensive library of Lua utility functions. The code has been simplified a bit: I removed error handling and any extra features which would decrease the clarity - and therefore education value - of the examples.
+
+</p>
+<p>Let&apos;s start with a simple function which converts its single numeric argument to a string, with thousands separated by commas (<code>12345678</code> =&gt; <code>&quot;12,345,678&quot;</code>):
+
+</p>
+<pre><code class="Lua"><span class="keyword">function</span> comma(val)
+   local thou = math.floor(val/<span class="number">1000</span>)
+   <span class="keyword">if</span> thou > <span class="number">0</span> then <span class="keyword">return</span> comma(thou)..<span class="string">','</span>..string.format(<span class="string">'%03d'</span>, val % <span class="number">1000</span>)
+   <span class="keyword">else</span> <span class="keyword">return</span> tostring(val) end
+end</code></pre>
+<p>The first line of the function declares the local variable <code>thou</code>. Local variables can be only accessed inside the lexical scope that defined them - in this case the body of the function. We initialize <code>thou</code> with the value of <code>math.floor(val/1000)</code>, using the <code>floor</code> function from the built-in <code>math</code> module. If <code>math.floor(val/1000)</code> is positive, then the original <code>val</code> was greater than 1000, therefore we&apos;ll need a comma before the last three digits. Here the function goes recursive: it calls itself to return a properly comma-separated string representation of <code>math.floor(val/1000)</code>, then concatenates a comma and the last three digits to the result (<code>..</code> is the string concatenation operator, <code>%</code> is modulo, <code>string.format</code> works like <code>printf</code> in C). If the <code>val</code> we got was less than 1000, then we just return <code>val</code> converted to a string.
+
+</p>
+<p>(Note: the <code>tostring</code> function has its brother <code>tonumber</code> which can be used to convert a string to a number.)
+
+</p>
+<p>Let&apos;s see a slightly more complicated example, a function which expands tab characters to spaces in a string:
+
+</p>
+<pre><code class="Lua"><span class="keyword">function</span> expand_tabs(s,n)
+   n = n <span class="keyword">or</span> <span class="number">8</span>
+   <span class="keyword">return</span> s:gsub(<span class="string">'([^\t]*)\t'</span>,
+                 <span class="keyword">function</span>(s)
+                    <span class="keyword">return</span> s..(<span class="string">' '</span>):rep(n - <span class="comment">#s % n)</span>
+                 end)
+end</code></pre>
+<p>The first argument of expand_tabs (<code>s</code>) is the string with the tabs in it, the second arg (<code>n</code>) specifies the width of one tab in character units.
+
+</p>
+<p>The <code>n = n or 8</code> idiom takes advantage of the short-circuiting nature of Lua&apos;s <code>or</code> operator: if the value of <code>n</code> is logically true - which in Lua means it is neither <code>nil</code> nor <code>false</code> - then the value of <code>n</code> stays as it is, otherwise it&apos;s replaced by eight. This idiom is widely used to assign default values to function arguments.
+
+</p>
+<p>The <code>s:gsub()</code> invocation calls a <em>method</em> on string object <code>s</code> - the exact meaning of this will be revealed later. The <code>gsub</code> method searches the string for the pattern given in the first argument (<code>([^\t]*)\t</code>), calls the function passed as the second arg for every match it finds and substitutes the match with the function&apos;s result. If the search pattern contains parenthesized subpatterns (captures), then the function is called with a list of the corresponding matches (as separate arguments), otherwise the entire match gets passed (in a single argument).
+
+</p>
+<p>This particular <code>gsub</code> invocation looks for groups of non-tab characters followed by a single tab, and replaces every match with the group of non-tab characters (unchanged) plus the right amount of spaces for the last tab. As <code>#s</code> returns the length of the string (the group of non-tab chars), <code>n - #s % n</code> gives the number of spaces which must be appended to make up for a single tab.
+
+</p>
+<p>The <code>(&apos; &apos;):rep()</code> call invokes the <code>rep(n)</code> string method which returns the string repeated <code>n</code> times.
+
+</p>
+<p>Strings in Lua may contain the following embedded escape sequences:
+
+</p>
+<pre><code class="Lua">\a bell
+\b backspace
+\f form feed
+\n newline
+\r carriage return
+\t horizontal tab
+\v vertical tab
+\\ backslash
+\" quotation mark [double quote]
+\' apostrophe [single quote]</code></pre>
+<p>It doesn&apos;t matter if a string is enclosed in single (<code>&apos;</code>) or double (<code>&quot;</code>) quotes, the semantics are the same.
+
+</p>
+<p>If you want to include a character with any byte value between 0-255, use <code>\nnn</code> where <code>nnn</code> is the byte value in decimal:
+
+</p>
+<pre><code class="Lua">assert("\a\b\f\n\r\t\v\\\"\'" == "\007\008\012\010\013\009\011\092\034\039")</code></pre>
+<p>Embedded zeroes are ok.
+
+</p>
+<p>(<code>assert</code> checks that its argument evaluates to true and throws an error if it doesn&apos;t.)
+
+</p>
+<h6>Logical operators</h6>
+<p>Lua has three logical operators: <code>or</code>, <code>and</code> and <code>not</code>.
+
+</p>
+<p>Their precedence order: <code>not</code> &gt; <code>and</code> &gt; <code>or</code>.
+
+</p>
+<p>Both <code>and</code> and <code>or</code> have short-circuiting behavior.
+
+</p>
+<p>The following examples illustrate their use:
+
+</p>
+<pre><code class="Lua">so_ext = os == <span class="string">"Windows"</span> <span class="keyword">and</span> <span class="string">'dll'</span> <span class="keyword">or</span> <span class="string">'so'</span></code></pre>
+<p>This example checks whether <code>os</code> equals the string <code>&quot;Windows&quot;</code>, if it does, the value of <code>so_ext</code> will be <code>&apos;dll&apos;</code>, otherwise, it will be <code>&apos;so&apos;</code>. The <code>&apos;so&apos;</code> part will be evaluated only if the <code>os == &quot;Windows&quot; and &apos;dll&apos;</code> part evaluates to false - which is only possible if <code>os</code> was not <code>&quot;Windows&quot;</code>.
+
+</p>
+<pre><code class="Lua">year = Y + (Y &lt; <span class="number">35</span> <span class="keyword">and</span> <span class="number">2000</span> <span class="keyword">or</span> <span class="number">1900</span>)</code></pre>
+<p>This line might be familiar to any maintenance programmer who spent the last years of the twentieth century removing Y2K bugs.
+
+</p>
+<pre><code class="Lua">step = finish > start <span class="keyword">and</span> <span class="number">1</span> <span class="keyword">or</span> -<span class="number">1</span></code></pre>
+<p>A way to decide whether we should increment or decrement our index variable in the upcoming loop if we want to get from <code>start</code> to <code>finish</code>.
+
+</p>
+<pre><code class="Lua"><span class="keyword">if</span> not year <span class="keyword">and</span> not month <span class="keyword">and</span> not day then
+   error <span class="string">"at least the year, the month or the day must be specified"</span>
+end</code></pre>
+<p><code>error</code> is the way to signal an error in Lua. This is similar to <em>throw</em> in other languages. The error that is thrown (which may be any object, not just a string) can be caught using <code>pcall</code> (protected call):
+
+</p>
+<pre><code class="Lua"><span class="keyword">function</span> main(arg1,arg2,arg3)
+  <span class="keyword">if</span> arg1 > <span class="number">5</span> then
+    error(<span class="string">"no"</span>)
+  <span class="keyword">else</span>
+    <span class="keyword">return</span> arg3,arg2,arg1
+  end
+end
+
+status,res1,res2,res3 = pcall(main,<span class="number">1</span>,<span class="number">2</span>,<span class="number">3</span>)
+assert(status==<span class="keyword">true</span>)
+assert(res1==<span class="number">3</span>)
+assert(res2==<span class="number">2</span>)
+assert(res3==<span class="number">1</span>)
+
+status,res1,res2,res3 = pcall(main,<span class="number">9</span>,<span class="number">8</span>,<span class="number">7</span>)
+assert(status==<span class="keyword">false</span>)
+assert(type(res1)==<span class="string">"string"</span>)
+assert(res2==nil)
+assert(res3==nil)</code></pre>
+<p>If the protected function (<code>main</code> in this case) didn&apos;t call <code>error</code> anywhere in its call graph, <code>pcall</code> returns with a <code>true</code> status plus the values returned by the function. (Here you can see how functions can return multiple values in Lua.)
+
+</p>
+<p>In the other case, <code>pcall</code> returns <code>false</code> and the error message (or object) which was thrown. As there are only two results, <code>res2</code> and <code>res3</code> are set to <code>nil</code>.
+
+</p>
+<p>The <code>type</code> function returns the type of its argument as a string.
+
+</p>
+<p>You may wonder why I used parentheses around <code>error</code>&apos;s argument in one case, and no parentheses in the other: in Lua, you are free to leave out the parentheses if you call a function with a single argument which is either a <em>string</em> or a <em>table constructor</em>.
+
+</p>
+<h6>Tables</h6>
+<p>Tables are associative arrays mapping unique keys to values. Both keys and values may be of an arbitrary type (but not <code>nil</code>).
+
+</p>
+<p>Tables are created with a table constructor:
+
+</p>
+<pre><code class="Lua">months = {jan=1,feb=2,mar=3,apr=4,may=5,jun=6,jul=7,aug=8,sep=9,oct=10,nov=11,dec=12}</code></pre>
+<p>This table can be used to map abbreviated month names to month numbers:
+
+</p>
+<pre><code class="Lua">assert(months["jan"]==1)
+assert(months["oct"]==10)</code></pre>
+<p>For keys which are valid Lua identifiers - meaning a string of letters, digits, and underscores not beginning with a digit - the following notation is also accepted:
+
+</p>
+<pre><code class="Lua">assert(months.jan==1)
+assert(months.oct==10)</code></pre>
+<p>Here is a function which converts accented characters in a string to their non-accented counterparts:
+
+</p>
+<pre><code class="Lua">local accent_maps = {
+   hu = {
+     [<span class="string">'á'</span>] = <span class="string">'a'</span>,
+     [<span class="string">'é'</span>] = <span class="string">'e'</span>,
+     [<span class="string">'í'</span>] = <span class="string">'i'</span>,
+     [<span class="string">'ó'</span>] = <span class="string">'o'</span>,
+     [<span class="string">'ú'</span>] = <span class="string">'u'</span>,
+     [<span class="string">'ö'</span>] = <span class="string">'o'</span>,
+     [<span class="string">'ü'</span>] = <span class="string">'u'</span>,
+     [<span class="string">'ő'</span>] = <span class="string">'o'</span>,
+     [<span class="string">'ű'</span>] = <span class="string">'u'</span>,
+   },
+}
+
+<span class="keyword">function</span> remove_accents(s,lang)
+   <span class="keyword">for</span> from,to in pairs(accent_maps[lang]) <span class="keyword">do</span>
+      s = s:gsub(from,to)
+   end
+   <span class="keyword">return</span> s
+end
+
+assert(remove_accents(<span class="string">"árvíztűrő tükörfúrógép"</span>,<span class="string">'hu'</span>)==<span class="string">"arvizturo tukorfurogep"</span>)</code></pre>
+<p>The function is not particularly efficient, but it works. It uses a <code>for..in</code> loop to iterate over the key-value pairs in a particular accent map (identified by <code>accent_maps[lang]</code>) and substitutes one kind of accented character on each iteration of the loop. The code assumes that the strings we process and the string literals in the code are encoded with the same character encoding. Lua doesn&apos;t know anything about accented characters: the keys in the <code>accent_maps.hu</code> table are seen as simple byte strings.
+
+</p>
+<p>As you probably noticed from the code, the list of items in a table constructor may end with a single comma - this feature helps us avoid a common error we get in other, more strict languages when we try to add new elements to a table - or change the order of elements - but forget to tidy up the separating commas.
+
+</p>
+<p>The <code>gsub</code> method is used in a slightly different manner than previously: if its second arg is a string, <code>gsub</code> uses that directly as the replacement value.
+
+</p>
+<h6>Arrays</h6>
+<p>In Lua, traditional arrays (with integer indices) are also implemented with tables:
+
+</p>
+<pre><code class="Lua">arr = { 1,5,10,20 }</code></pre>
+<p>This table constructor is short-hand for the following, more verbose one:
+
+</p>
+<pre><code class="Lua">arr = { [1]=1,[2]=5,[3]=10,[4]=20 }</code></pre>
+<p>In other words, if we list a value without a key, it gets an auto-incremented index starting from 1:
+
+</p>
+<pre><code class="Lua">arr = { <span class="number">1</span>,<span class="number">2</span>,fire=<span class="string">"water"</span>,<span class="string">"leaves"</span>,[<span class="number">1</span>]=<span class="number">8</span>,nil,<span class="keyword">function</span>() <span class="keyword">return</span> <span class="number">42</span> end }
+assert(arr[<span class="number">1</span>]==<span class="number">8</span>)
+assert(arr[<span class="number">2</span>]==<span class="number">2</span>)
+assert(arr.fire==<span class="string">"water"</span>)
+assert(arr[<span class="number">3</span>]==<span class="string">"leaves"</span>)
+assert(arr[<span class="number">4</span>]==nil)
+assert(type(arr[<span class="number">5</span>])==<span class="string">"function"</span>)
+assert(arr[<span class="number">5</span>]()==<span class="number">42</span>)</code></pre>
+<p>As the example shows, an element which belongs to an already assigned index (<code>1</code>) may be later overwritten by explicit specification of the same integer key (<code>[1]=8</code>).
+
+</p>
+<p>Internally, table elements indexed by integers are kept separately (in an <em>array part</em>) from elements indexed by other types (the <em>hash part</em>). This ensures optimal efficiency for both use cases.
+
+</p>
+<h6>Control structures: the for..in loop</h6>
+<p>The <code>for..in</code> loop can be used to iterate over a series of values provided by an <em>iterator function</em> (the semantics will be explained later).
+
+</p>
+<p>It&apos;s typically used like this:
+
+</p>
+<pre><code class="Lua"><span class="keyword">for</span> &lt;var1>,&lt;var2>,... in &lt;iterator> <span class="keyword">do</span>
+  &lt;block>
+end</code></pre>
+<p>On each pass of the loop, <code>&lt;iterator&gt;</code> returns a fixed number of values which get assigned to the <code>&lt;var1&gt;</code>, <code>&lt;var2&gt;</code>, ... local variables visible inside <code>&lt;block&gt;</code>.
+
+</p>
+<p>A common use case is iteration over the key-value pairs of a table:
+
+</p>
+<pre><code class="Lua"><span class="keyword">function</span> table_copy(t)
+   local res = {}
+   <span class="keyword">for</span> k,v in pairs(t) <span class="keyword">do</span>
+      res[k] = v
+   end
+   <span class="keyword">return</span> res
+end</code></pre>
+<p>The iterator created by <code>pairs(t)</code> returns two values on each iteration: the key and value of the next element in <code>t</code>.
+
+</p>
+<p>Here is a function to count the number of elements:
+
+</p>
+<pre><code class="Lua"><span class="keyword">function</span> table_size(t)
+   local i = <span class="number">0</span>
+   <span class="keyword">for</span> k in pairs(t) <span class="keyword">do</span> i = i + <span class="number">1</span> end
+   <span class="keyword">return</span> i
+end</code></pre>
+<p>As you see, you don&apos;t have to take all values provided by the iterator: here we only take the key. (This is generally true: if you call a function which returns N values but you assign less than N variables on the calling side, the rest of the values are silently dropped. On the contrary, if you assign more values than returned from the function, the remaining variables will be set to <code>nil</code>.)
+
+</p>
+<pre><code class="Lua"><span class="keyword">function</span> table_foreach(t,fun)
+   <span class="keyword">for</span> k,v in pairs(t) <span class="keyword">do</span>
+      fun(k,v)
+   end
+end</code></pre>
+<p>Here we take the function <code>fun</code> and apply it to each key-value pair in the table.
+
+</p>
+<p>Let&apos;s see how we could write a function which gets an array of daily maximum temperatures, a limit, and prints the first day when the daily temperature exceeded the limit.
+
+</p>
+<p>First we define a table with the temperatures and print it out using <code>table_foreach</code>:
+
+</p>
+<pre><code class="Lua">daily_max_temperatures = {<span class="number">30</span>, <span class="number">35</span>, <span class="number">32</span>, <span class="number">34</span>, <span class="number">38</span>};
+
+table_foreach(daily_max_temperatures,
+  <span class="keyword">function</span>(day,temp)
+    <span class="keyword">print</span>(string.format(<span class="string">"the temperature on day #%d was %d degrees"</span>, day, temp))
+  end)</code></pre>
+<p>The result:
+
+</p>
+<pre><code>the temperature on day <span class="comment">#1 was 30 degrees</span>
+the temperature on day <span class="comment">#2 was 35 degrees</span>
+the temperature on day <span class="comment">#3 was 32 degrees</span>
+the temperature on day <span class="comment">#4 was 34 degrees</span>
+the temperature on day <span class="comment">#5 was 38 degrees</span></code></pre>
+<p>Now let&apos;s build a function which takes a table <code>t</code> and a function <code>pred</code>, then finds the first value <code>v</code> in table <code>t</code> for which <code>pred(v)</code> returns a logically true value (neither <code>nil</code> nor <code>false</code>):
+
+</p>
+<pre><code class="Lua"><span class="keyword">function</span> table_find_if(t,pred)
+   <span class="keyword">for</span> k,v in pairs(t) <span class="keyword">do</span>
+      <span class="keyword">if</span> pred(v) then <span class="keyword">return</span> k,v end
+   end
+   <span class="keyword">return</span> nil
+end</code></pre>
+<p>If a table has both integer and non-integer keys, <code>pairs</code> first iterates over the elements keyed with integer indices (in ascending key order) and then over the rest (in unspecified order). <small>(<a href="http://www.lua.org/source/5.1/ltable.c.html#luaH_next">source</a>)</small>
+
+</p>
+<pre><code class="Lua"><span class="keyword">function</span> table_find_if_exceeds(t,limit)
+   <span class="keyword">return</span> table_find_if(t, <span class="keyword">function</span>(v) <span class="keyword">return</span> v > limit end)
+end</code></pre>
+<p>This one finds the first value in <code>t</code> which exceeds <code>limit</code>. Returns both the key and the value.
+
+</p>
+<p>Utilizing these helper functions, we could build a solution to the original problem like this:
+
+</p>
+<pre><code class="Lua"><span class="keyword">function</span> print_first_day_when_temp_exceeded(limit, templist)
+   day,degrees = table_find_if_exceeds(templist, limit)
+   <span class="keyword">if</span> day then
+      <span class="keyword">print</span>(string.format(<span class="string">"The temperature on day #%d exceeded the limit of %d by %d degrees."</span>, day, limit, degrees-limit))
+   end
+end
+
+print_first_day_when_temp_exceeded(<span class="number">36</span>, daily_max_temperatures)</code></pre>
+<h6>Understanding the for..in loop</h6>
+<p>The <a href="http://www.lua.org/manual/5.1/manual.html">Lua manual</a> gives the following definition for the <code>for..in</code> loop:
+
+</p>
+<p>A <code>for</code> statement like
+
+</p>
+<pre><code class="Lua"><span class="keyword">for</span> &lt;var_1>, ···, &lt;var_n> in &lt;explist> <span class="keyword">do</span>
+  &lt;block>
+end</code></pre>
+<p>is equivalent to the following code:
+
+</p>
+<pre><code class="Lua"><span class="keyword">do</span>
+  local f, s, <span class="keyword">var</span> = &lt;explist>
+  <span class="keyword">while</span> <span class="keyword">true</span> <span class="keyword">do</span>
+    local &lt;var_1>, ···, &lt;var_n> = f(s, <span class="keyword">var</span>)
+    <span class="keyword">var</span> = &lt;var_1>
+    <span class="keyword">if</span> <span class="keyword">var</span> == nil then <span class="keyword">break</span> end
+    &lt;block>
+  end
+end</code></pre>
+<p>(<code>do...end</code> creates a new lexical scope for a block of statements. <code>break</code> can be used to exit the innermost <code>while</code>, <code>repeat</code> or <code>for</code> loop.)
+
+</p>
+<p>To help you decipher this definition, I offer the following code example:
+
+</p>
+<pre><code class="Lua"><span class="keyword">function</span> range(from,to)
+  local <span class="keyword">function</span> f(s,<span class="keyword">var</span>)
+    <span class="keyword">if</span> <span class="keyword">var</span> == nil then <span class="keyword">return</span> from
+    <span class="keyword">elseif</span> <span class="keyword">var</span> >= to then <span class="keyword">return</span> nil
+    <span class="keyword">else</span> <span class="keyword">return</span> <span class="keyword">var</span>+<span class="number">1</span> end
+  end
+  <span class="keyword">return</span> f,nil,nil
+end
+
+local s = <span class="string">""</span>
+<span class="keyword">for</span> i in range(<span class="number">1</span>,<span class="number">10</span>) <span class="keyword">do</span> s = s..tostring(i) end
+assert(s==<span class="string">"12345678910"</span>)</code></pre>
+<p>The <code>f</code> <em>iterator function</em> created and returned by <code>range(1,10)</code> will be called with the following arguments during the <code>for..in</code> loop (pseudo-code):
+
+</p>
+<pre><code class="Lua">f(s=nil,<span class="keyword">var</span>=nil) => <span class="number">1</span>
+f(s=nil,<span class="keyword">var</span>=<span class="number">1</span>) => <span class="number">2</span>
+f(s=nil,<span class="keyword">var</span>=<span class="number">2</span>) => <span class="number">3</span>
+...
+f(s=nil,<span class="keyword">var</span>=<span class="number">9</span>) => <span class="number">10</span>
+f(s=nil,<span class="keyword">var</span>=<span class="number">10</span>) => nil</code></pre>
+<p>Upon the first call, <code>f</code> gets <code>var</code>=<code>nil</code>, which corresponds to the initial <code>var</code> value returned by <code>range</code>. This special &quot;warm-up&quot; case is handled by returning the first value in the series (<code>from</code>).
+
+</p>
+<p>From here on, <code>f</code> will be called with the same <code>var</code> which it returned in the previous iteration, and it continues to return <code>var+1</code> until <code>var</code> has reached the higher limit of <code>to</code>. At that point, <code>f</code> returns <code>nil</code>, which signals the <code>for..in</code> mechanism that the loop is over.
+
+</p>
+<p>In this example, we haven&apos;t made use of the <code>s</code> state variable, so I&apos;ll try to show you another - somewhat contrived and hypothetical (although possible) - example where <code>s</code> could be put to good use:
+
+</p>
+<pre><code class="Lua"><span class="keyword">function</span> mysql_query(sql,params)
+  local stmt = mysql_prepare(sql)
+  local resultset = stmt:execute(params)
+  local f(res)
+    <span class="keyword">return</span> res:fetch_row()
+  end
+  <span class="keyword">return</span> f,resultset
+end
+
+<span class="keyword">for</span> row in mysql_query(<span class="string">"SELECT * FROM users WHERE year_of_birth&lt;?"</span>, {<span class="number">1975</span>}) <span class="keyword">do</span>
+  <span class="keyword">print</span>(string.format(<span class="string">"user %s was born in %d"</span>, row.name, row.year_of_birth))
+end</code></pre>
+<p>The example is contrived because we don&apos;t really need the state parameter - the following definition of <code>mysql_query</code> would also suffice:
+
+</p>
+<pre><code class="Lua"><span class="keyword">function</span> mysql_query(sql,params)
+  local stmt = mysql_prepare(sql)
+  local resultset = stmt:execute(params)
+  <span class="keyword">return</span> <span class="keyword">function</span>() <span class="keyword">return</span> resultset:fetch_row() end
+end</code></pre>
+<p>This version would work because Lua functions are actually <em>closures</em>: they can hold references to the local variables that were in scope at the point of their definition, even after the block of code which created them (<code>mysql_query</code> in this case) has returned.
+
+</p>
+<h6>Closures</h6>
+<p>(This section may be a bit hard-core, feel free to skip it if you don&apos;t understand what is going on.)
+
+</p>
+<p>Formally, each closure (= function) is a <code>&lt;proto,upvalues,env&gt;</code> triple, where <code>proto</code> is a compiled function skeleton (prototype), <code>upvalues</code> is an array of references (pointers) to external local variables used by the closure and <code>env</code> is a table used to look up the value of global variables.
+
+</p>
+<p>When the <code>mysql_query</code> function gets compiled - which happens only once, at parse time - the following prototype is created for the iterator function it returns on each call:
+
+</p>
+<pre><code class="Lua"><span class="keyword">function</span>()
+  <span class="keyword">return</span> &lt;uv1>:fetch_row()
+end</code></pre>
+<p>The compiler detects that each iterator function created by <code>mysql_query</code> will reference one external local variable (labeled <code>resultset</code> in the code). In the compiled prototype, <code>&lt;uv1&gt;</code> becomes a placeholder for the first element of the closure&apos;s <code>&lt;upvalues&gt;</code> array, which at this point does not exist yet.
+
+</p>
+<p>When we actually call <code>mysql_query</code> and the argument of the final <code>return</code> statement needs to be constructed, the already compiled function prototype is <em>instantiated</em>: a new closure is created with its <code>proto</code> set to the compiled prototype, <code>upvalues</code> set to a newly allocated array of one element (filled with a reference to the <code>resultset</code> variable created <em>during this particular execution of</em> <code>mysql_query</code>) and <code>env</code> set to the environment associated with the <code>mysql_query</code> function.
+
+</p>
+<p>Functions (= closures) inherit their environment from the closure that created them. Functions defined at the top level inherit the environment of the top-level closure, which is initially the <em>global environment</em>, a singleton table created at VM initialization. The standard library functions are also registered in the global environment.
+
+</p>
+<p>The <code>env</code> of a closure can be retrieved and changed using the <code>getfenv(f)</code> and <code>setfenv(f,table)</code> functions, respectively. The global environment can be acquired by calling <code>getfenv(0)</code>. Using these functions, it&apos;s relatively easy to set up a sandboxed Lua environment for execution of potentially dangerous Lua code:
+
+</p>
+<pre><code class="Lua">local safe_env = { <span class="keyword">print</span> = <span class="keyword">print</span>, math = math }
+local f = loadfile(<span class="string">"user-provided-script.lua"</span>)
+setfenv(f, safe_env)
+f()</code></pre>
+<p>With this setup, the only things <code>f()</code> will have access to are the language keywords (<code>if</code>, <code>while</code>, <code>for</code>, <code>function</code>, etc.), the <code>print</code> function and all functions in the <code>math</code> module. In particular, <code>f()</code> cannot access the global environment because <code>getfenv</code> is not available to it.
+
+</p>
+<p>Warning: if you do a <code>setfenv(0,{})</code>, you will be most likely doomed.
+
+</p>
+<h6>Arithmetic progressions</h6>
+<p>For this type of iteration, we use another variant of the <code>for</code> loop:
+
+</p>
+<pre><code class="Lua">local tablex = {}
+
+<span class="keyword">function</span> tablex.range (start,finish,step)
+   <span class="keyword">if</span> start == finish then <span class="keyword">return</span> {start}
+   <span class="keyword">elseif</span> start > finish then <span class="keyword">return</span> {}
+   end
+   local res = {}
+   local k = <span class="number">1</span>
+   <span class="keyword">if</span> not step then
+      step = finish > start <span class="keyword">and</span> <span class="number">1</span> <span class="keyword">or</span> -<span class="number">1</span>
+   end
+   <span class="keyword">for</span> i=start,finish,step <span class="keyword">do</span> res[k]=i; k=k+<span class="number">1</span> end
+   <span class="keyword">return</span> res
+end
+
+local t = tablex.range(<span class="number">1</span>,<span class="number">10</span>,<span class="number">3</span>)
+assert(<span class="comment">#t==4 and t[1]==1 and t[2]==4 and t[3]==7 and t[4]==10)</span></code></pre>
+<p>What you are seeing here is probably the simplest approach to the creation of namespaces: just make a table and place functions into it.
+
+</p>
+<p><code>function tablex.range() ... end</code> is shorthand for <code>tablex.range = function() ... end</code>: we create a function and assign it to a table element.
+
+</p>
+<p>The following function returns the <em>tail</em> of its list argument - a new list consisting of every element in the original list except the first:
+
+</p>
+<pre><code class="Lua">local append = table.insert
+
+<span class="keyword">function</span> tail(ls)
+   local res = {}
+   <span class="keyword">for</span> i = <span class="number">2</span>,<span class="comment">#ls do</span>
+      append(res,ls[i])
+   end
+   <span class="keyword">return</span> res
+end</code></pre>
+<p>The <code>step</code> argument of a counted <code>for</code> loop defaults to 1.
+
+</p>
+<p>The <code>table.insert</code> function comes from the standard library. The reason why the code creates a local proxy for it may be interesting: <code>tail</code> - as a closure - has access to both external local variables in its enclosing scopes (via <code>upvalues</code>) and global variables (through its <code>environment</code>). When <code>tail</code>&apos;s function prototype gets compiled, the compiler analyzes the function&apos;s variable references and assigns them into three groups: stack, upvalue and env references. References to stack variables - function arguments and local variables defined inside the function - will become simple pointers to a known element on the stack. References to upvalues - external locals in any of the enclosing scopes - will become pointers to elements of the <code>upvalues</code> array, while global references will be compiled into a table lookup (the name of the variable will be looked up - at runtime - in the closure&apos;s <code>env</code>).
+
+</p>
+<p>As stack and upvalue lookups need only a pointer dereference, and the position of a given item in the respective array is hard-coded into the function&apos;s bytecode, these can be significantly faster than the hash table lookup implied by a global reference.
+
+</p>
+<p>On the other hand, statically hard-coded upvalues cannot be (easily) replaced after the function has been compiled, so if we want dynamic code updates (live coding), the use of global references may be preferred.
+
+</p>
+<h6>While..do..end</h6>
+<p>The following function joins a list of path components into a complete pathstring, using the path separator passed as the first argument:
+
+</p>
+<pre><code class="Lua"><span class="keyword">function</span> path_join(sep, ...)
+   local parts = {...}
+   <span class="keyword">for</span> i,part in ipairs(parts) <span class="keyword">do</span>
+      -- Strip leading slashes on all but first item
+      <span class="keyword">if</span> i > <span class="number">1</span> then
+         <span class="keyword">while</span> part:sub(<span class="number">1</span>,<span class="number">1</span>) == sep <span class="keyword">do</span>
+            part = part:sub(<span class="number">2</span>)
+         end
+      end
+      -- Strip trailing slashes on all but last item
+      <span class="keyword">if</span> i &lt; <span class="comment">#parts then</span>
+         <span class="keyword">while</span> part:sub(<span class="comment">#part) == sep do</span>
+            part = part:sub(<span class="number">1</span>,<span class="comment">#part-1)</span>
+         end
+      end
+      parts[i] = part
+   end
+   <span class="keyword">return</span> table.concat(parts,sep)
+end
+
+assert(path_join(<span class="string">'/'</span>, <span class="string">'/usr'</span>, <span class="string">'bin'</span>, <span class="string">'luajit'</span>) == <span class="string">'/usr/bin/luajit'</span>)</code></pre>
+<p>The major new element introduced here is the <em>vararg expression</em> (<code>...</code>) used to collect the arguments following <code>sep</code>.
+
+</p>
+<p>This is a special construct with only a handful of uses:
+
+</p>
+<ol>
+<li>you may use it inside a table constructor (if used in the middle, it expands to the first item, if used as the last value, it expands to all items)</li>
+<li>you may use it on the right side of a multiple assignment (with the same rules)</li>
+<li>you can return it from a function (it gets unpacked to multiple return values)</li>
+<li>you can pass it to another function (if passed as the last argument, the callee gets the contained items as extra arguments, if passed as a middle arg, the callee gets the first item)</li>
+</ol>
+<p><code>local parts = {...}</code> places the extra arguments into a local table for easy access.
+
+</p>
+<p>The <code>ipairs(t)</code> function creates an iterator which returns a series of <code>(1,t[1])</code>, <code>(2,t[2])</code>, <code>(3,t[3])</code>, ... pairs. This function was invented for iterating integer-indexed arrays. A possible Lua implementation:
+
+</p>
+<pre><code class="Lua"><span class="keyword">function</span> ipairs(t)
+   local <span class="keyword">function</span> f(t,<span class="keyword">var</span>)
+      <span class="keyword">var</span> = <span class="keyword">var</span> + <span class="number">1</span>
+      local next = t[<span class="keyword">var</span>]
+      <span class="keyword">if</span> next then
+         <span class="keyword">return</span> <span class="keyword">var</span>, next
+      <span class="keyword">else</span>
+         <span class="keyword">return</span> nil
+      end
+   end
+   <span class="keyword">return</span> f,t,<span class="number">0</span>
+end</code></pre>
+<p>The <code>s:sub(start[,end])</code> method returns a substring of <code>s</code> starting at (1-based) index <code>start</code> and ending at <code>end</code> (inclusive). If <code>end</code> is not supplied, it defaults to <code>#s</code>. Both <code>start</code> and <code>end</code> may be negative, in which case they count from the end of the string (<code>-1</code> corresponds to the last character).
+
+</p>
+<p>Comments begin with <code>--</code> and extend to the end of line.
+
+</p>
+<p><code>table.concat(t,sep)</code> joins the elements of <code>t</code> into a string, with the elements separated by <code>sep</code>.
+
+</p>
+<h6>Repeat..until</h6>
+<pre><code class="Lua"><span class="keyword">function</span> fs.readfile(path)
+   local fd = fs.open(path, <span class="string">"r"</span>)
+   local parts = {}
+   local length = <span class="number">0</span>
+   local offset = <span class="number">0</span>
+   repeat
+      local chunk, len = fs.read(fd, offset, <span class="number">4096</span>)
+      <span class="keyword">if</span> len > <span class="number">0</span> then
+         offset = offset + len
+         length = length + <span class="number">1</span>
+         parts[length] = chunk
+      end
+   until len == <span class="number">0</span>
+   fs.close(fd)
+   <span class="keyword">return</span> table.concat(parts)
+end</code></pre>
+<p>This should be trivial to understand by now. The loop exits when the expression following <code>until</code> becomes logically true.
+
+</p>
+<p>As you see, the local variable <code>len</code> - defined inside the repeat..until block - can be also accessed in the expression after <code>until</code>. In other words, the scope of the repeat..until block extends to the expression after <code>until</code>.
+
+</p>
+<h6>Metatables</h6>
+<p>A <em>metatable</em> is an ordinary Lua table with VM-defined, special keys. These metatables can be associated with any Lua value (usually a table) to change the behavior of the following VM operations:
+
+</p>
+<table>
+  <tr>
+    <th>Operator symbol</th>
+    <th>Name of operation</th>
+    <th>Corresponding metatable key</th>
+  </tr>
+  <tr>
+    <td><code>+</code></th>
+    <td>addition</th>
+    <td><code>__add</code></th>
+  </tr>
+  <tr>
+    <td><code>-</code></th>
+    <td>subtraction</th>
+    <td><code>__sub</code></th>
+  </tr>
+  <tr>
+    <td><code>*</code></th>
+    <td>multiplication</th>
+    <td><code>__mul</code></th>
+  </tr>
+  <tr>
+    <td><code>/</code></th>
+    <td>division</th>
+    <td><code>__div</code></th>
+  </tr>
+  <tr>
+    <td><code>%</code></th>
+    <td>modulo</th>
+    <td><code>__mod</code></th>
+  </tr>
+  <tr>
+    <td><code>^</code></th>
+    <td>exponentiation</th>
+    <td><code>__pow</code></th>
+  </tr>
+  <tr>
+    <td><code>-</code></th>
+    <td>unary minus</th>
+    <td><code>__unm</code></th>
+  </tr>
+  <tr>
+    <td><code>..</code></th>
+    <td>concatenation</th>
+    <td><code>__concat</code></th>
+  </tr>
+  <tr>
+    <td><code>#</code></th>
+    <td>length</th>
+    <td><code>__len</code></th>
+  </tr>
+  <tr>
+    <td><code>==</code></th>
+    <td>equality test</th>
+    <td><code>__eq</code></th>
+  </tr>
+  <tr>
+    <td><code>&lt;</code></th>
+    <td>less than</th>
+    <td><code>__lt</code></th>
+  </tr>
+  <tr>
+    <td><code>&lt;=</code></th>
+    <td>less than or equal</th>
+    <td><code>__le</code></th>
+  </tr>
+  <tr>
+    <td><code>[]</code></th>
+    <td>get element</th>
+    <td><code>__index</code></th>
+  </tr>
+  <tr>
+    <td><code>[]=</code></th>
+    <td>set element</th>
+    <td><code>__newindex</code></th>
+  </tr>
+  <tr>
+    <td><code>()</code></th>
+    <td>call</th>
+    <td><code>__call</code></th>
+  </tr>
+</table>
+
+<p>For instance, if you implemented complex numbers as a table of two elements (real and imaginary components), and arrange it so that every such table gets an associated metatable which overrides the standard arithmetic operations in the right way, you could use these operators on your complex tables in the same way you would use them on ordinary numbers.
+
+</p>
+<p>Instead of discussing all the minutae regarding metatables - which you can find in the <a href="http://www.lua.org/manual/5.1/manual.html">Lua manual</a> -, I&apos;ll show you how to define a custom <code>List</code> datatype using them.
+
+</p>
+<p>Our new <code>List</code> datatype will behave like a class: it will have a &quot;constructor&quot; and &quot;methods&quot; which can be invoked on its &quot;objects&quot;.
+
+</p>
+<p>The class methods will be stored as functions inside a <code>List</code> table (the &quot;class&quot; itself):
+
+</p>
+<pre><code class="Lua"><span class="keyword">List</span> = {}
+<span class="keyword">List</span>.__index = <span class="keyword">List</span>
+
+<span class="keyword">function</span> <span class="keyword">List</span>.<span class="keyword">new</span>(t)
+   t = t <span class="keyword">or</span> {}
+   <span class="keyword">return</span> setmetatable(t, <span class="keyword">List</span>)
+end</code></pre>
+<p><code>List.new()</code> creates a new List object, which is nothing more than a plain table with <code>List</code> as its metatable. <code>setmetatable(t,mt)</code> sets <code>mt</code> as the metatable of <code>t</code> and then returns <code>t</code>.
+
+</p>
+<p>Before trying to understand the <code>List.__index = List</code> line, let&apos;s define some methods:
+
+</p>
+<pre><code class="Lua"><span class="keyword">function</span> <span class="keyword">List</span>:append(i)
+   table.insert(<span class="keyword">self</span>,i)
+   <span class="keyword">return</span> <span class="keyword">self</span>
+end
+
+<span class="keyword">List</span>.push = <span class="keyword">List</span>.append
+
+<span class="keyword">function</span> <span class="keyword">List</span>:extend(L)
+   <span class="keyword">for</span> i = <span class="number">1</span>,<span class="comment">#L do table.insert(self,L[i]) end</span>
+   <span class="keyword">return</span> <span class="keyword">self</span>
+end</code></pre>
+<p><code>function List:append(i) ... end</code> is syntactic sugar for <code>function List.append(self,i) ... end</code>. Similarly, calling <code>obj:method(...)</code> is the same as calling <code>obj.method(obj, ...)</code> (but <code>obj</code> is evaluated only once).
+
+</p>
+<p><code>List.push</code> is defined as an alias for <code>List.append</code>.
+
+</p>
+<p>Now let&apos;s discuss what happens when you do this:
+
+</p>
+<pre><code class="Lua">local ls = <span class="keyword">List</span>.<span class="keyword">new</span>()
+ls:push(<span class="number">1</span>)</code></pre>
+<p>After the assignment, <code>ls</code> is a plain (and empty) table, with its metatable set to <code>List</code>. When the VM tries to find <code>ls.push</code>, it doesn&apos;t find it in <code>ls</code> itself, so it checks whether <code>ls</code> has a metatable (it has) and whether this metatable has an <code>__index</code> key (it has). If the value under the <code>__index</code> key is a table (it is), then the VM checks this table for a <code>push</code> key as well. If <code>push</code> exists there, its value is returned as the lookup result.
+
+</p>
+<p>Now you can understand why <code>List.__index</code> has been set to <code>List</code> itself: to let List objects find their methods.
+
+</p>
+<pre><code class="Lua"><span class="keyword">function</span> <span class="keyword">List</span>:insert(i, x)
+   table.insert(<span class="keyword">self</span>,i,x)
+   <span class="keyword">return</span> <span class="keyword">self</span>
+end
+
+<span class="keyword">function</span> <span class="keyword">List</span>:remove (i)
+   table.remove(<span class="keyword">self</span>,i)
+   <span class="keyword">return</span> <span class="keyword">self</span>
+end</code></pre>
+<p>The three-argument version of <code>table.insert(t,i,x)</code> inserts <code>x</code> at position <code>i</code>, <code>table.remove(t,i)</code> removes the <code>i</code>th element.
+
+</p>
+<pre><code class="Lua"><span class="keyword">function</span> <span class="keyword">List</span>:remove_value(x)
+   <span class="keyword">for</span> i=<span class="number">1</span>,<span class="comment">#self do</span>
+      <span class="keyword">if</span> <span class="keyword">self</span>[i]==x then table.remove(<span class="keyword">self</span>,i) <span class="keyword">return</span> <span class="keyword">self</span> end
+   end
+   <span class="keyword">return</span> <span class="keyword">self</span>
+end
+
+<span class="keyword">function</span> <span class="keyword">List</span>:pop(i)
+   <span class="keyword">if</span> not i then i = <span class="comment">#self end</span>
+   <span class="keyword">return</span> table.remove(<span class="keyword">self</span>,i)
+end
+
+<span class="keyword">function</span> <span class="keyword">List</span>:count(x)
+   local cnt=<span class="number">0</span>
+   <span class="keyword">for</span> i=<span class="number">1</span>,<span class="comment">#self do</span>
+      <span class="keyword">if</span> <span class="keyword">self</span>[i]==x then cnt=cnt+<span class="number">1</span> end
+   end
+   <span class="keyword">return</span> cnt
+end</code></pre>
+<p>These are all pretty straight-forward.
+
+</p>
+<pre><code class="Lua"><span class="keyword">function</span> <span class="keyword">List</span>:reverse()
+   local t = <span class="keyword">self</span>
+   local n = <span class="comment">#t</span>
+   local n2 = n/<span class="number">2</span>
+   <span class="keyword">for</span> i = <span class="number">1</span>,n2 <span class="keyword">do</span>
+      local k = n-i+<span class="number">1</span>
+      t[i],t[k] = t[k],t[i]
+   end
+   <span class="keyword">return</span> <span class="keyword">self</span>
+end</code></pre>
+<p>Here we can see an important feature of multiple assignment: in <code>t[i],t[k] = t[k],t[i]</code> Lua does the assignment only after all expressions on the right side have been evaluated.
+
+</p>
+<pre><code class="Lua"><span class="keyword">function</span> <span class="keyword">List</span>:minmax()
+   local vmin,vmax = <span class="number">1</span>e70,-<span class="number">1</span>e70
+   <span class="keyword">for</span> i = <span class="number">1</span>,<span class="comment">#self do</span>
+      local v = <span class="keyword">self</span>[i]
+      <span class="keyword">if</span> v &lt; vmin then vmin = v end
+      <span class="keyword">if</span> v > vmax then vmax = v end
+   end
+   <span class="keyword">return</span> vmin,vmax
+end
+
+<span class="keyword">function</span> <span class="keyword">List</span>:len()
+   <span class="keyword">return</span> <span class="comment">#self</span>
+end
+
+<span class="keyword">function</span> <span class="keyword">List</span>:<span class="keyword">clone</span>()
+   local ls = <span class="keyword">List</span>.<span class="keyword">new</span>({})
+   ls:extend(<span class="keyword">self</span>)
+   <span class="keyword">return</span> ls
+end
+
+<span class="keyword">function</span> <span class="keyword">List</span>:__concat(L)
+   local ls = <span class="keyword">self</span>:<span class="keyword">clone</span>()
+   ls:extend(L)
+   <span class="keyword">return</span> ls
+end</code></pre>
+<p>Here we defined a <code>__concat</code> metamethod to concatenate two <code>List</code> values.
+
+</p>
+<p>Let&apos;s define the equality operation as well:
+
+</p>
+<pre><code class="Lua"><span class="keyword">function</span> <span class="keyword">List</span>:equals(L)
+   <span class="keyword">if</span> <span class="comment">#self ~= #L then return false end</span>
+   <span class="keyword">for</span> i = <span class="number">1</span>,<span class="comment">#self do</span>
+      <span class="keyword">if</span> <span class="keyword">self</span>[i] ~= L[i] then <span class="keyword">return</span> <span class="keyword">false</span> end
+   end
+   <span class="keyword">return</span> <span class="keyword">true</span>
+end
+
+<span class="keyword">List</span>.__eq = <span class="keyword">List</span>.equals</code></pre>
+<p>The reason for the indirection (<code>__eq</code> =&gt; <code>equals</code>): the equality metamethod is invoked only if the compared values have the same metatable (both are <code>List</code>s). It is <em>not</em> invoked if we try to compare a List with a plain table, so we provide a separate <code>equals</code> method for that.
+
+</p>
+<pre><code class="Lua">local <span class="keyword">function</span> tostring_q(val)
+   local s = tostring(val)
+   <span class="keyword">if</span> type(val) == <span class="string">'string'</span> then
+      s = <span class="string">'"'</span>..s..<span class="string">'"'</span>
+   end
+   <span class="keyword">return</span> s
+end</code></pre>
+<p>This is a helper function for the <code>List.join</code> method defined below: if <code>val</code> is a string, it returns it between double quotes, otherwise returns it stringified with <code>tostring</code>.
+
+</p>
+<pre><code class="Lua"><span class="keyword">function</span> <span class="keyword">List</span>:map(f)
+   local ls = <span class="keyword">List</span>.<span class="keyword">new</span>()
+   <span class="keyword">for</span> i=<span class="number">1</span>,<span class="comment">#self do</span>
+      ls:append(f(<span class="keyword">self</span>[i]))
+   end
+   <span class="keyword">return</span> ls
+end
+
+<span class="keyword">function</span> <span class="keyword">List</span>:join(delim,tostrfn)
+   delim = delim <span class="keyword">or</span> <span class="string">''</span>
+   tostrfn = tostrfn <span class="keyword">or</span> tostring_q
+   <span class="keyword">return</span> table.concat(<span class="keyword">self</span>:map(tostrfn), delim)
+end
+
+<span class="keyword">function</span> <span class="keyword">List</span>:__tostring()
+   <span class="keyword">return</span> <span class="string">'{'</span>..<span class="keyword">self</span>:join(<span class="string">','</span>)..<span class="string">'}'</span>
+end</code></pre>
+<p>Finally, we set a metatable on <code>List</code> itself, to enable the use of <code>List</code> as a constructor:
+
+</p>
+<pre><code class="Lua">setmetatable(<span class="keyword">List</span>,{
+    __call = <span class="keyword">function</span> (tbl,arg)
+       <span class="keyword">return</span> <span class="keyword">List</span>.<span class="keyword">new</span>(arg)
+    end,
+})</code></pre>
+<p>Here are some test cases to verify that everything works as expected:
+
+</p>
+<pre><code class="Lua">local ls = <span class="keyword">List</span>()
+assert(getmetatable(ls)==<span class="keyword">List</span>)
+ls:push(<span class="number">1</span>)
+ls:append(<span class="string">"fire"</span>)
+ls:push(<span class="number">3.14</span>)
+assert(ls:equals {<span class="number">1</span>,<span class="string">"fire"</span>,<span class="number">3.14</span>})
+ls:extend(ls)
+assert(ls:equals {<span class="number">1</span>,<span class="string">"fire"</span>,<span class="number">3.14</span>,<span class="number">1</span>,<span class="string">"fire"</span>,<span class="number">3.14</span>})
+ls:insert(<span class="number">3</span>,<span class="string">"water"</span>)
+assert(ls:equals {<span class="number">1</span>,<span class="string">"fire"</span>,<span class="string">"water"</span>,<span class="number">3.14</span>,<span class="number">1</span>,<span class="string">"fire"</span>,<span class="number">3.14</span>})
+ls:remove(<span class="number">1</span>)
+ls:remove(<span class="number">4</span>)
+assert(ls:equals {<span class="string">"fire"</span>,<span class="string">"water"</span>,<span class="number">3.14</span>,<span class="string">"fire"</span>,<span class="number">3.14</span>})
+assert(tostring(ls)==<span class="string">'{"fire","water",3.14,"fire",3.14}'</span>)
+ls:remove_value(<span class="number">3.14</span>)
+assert(ls:equals {<span class="string">"fire"</span>,<span class="string">"water"</span>,<span class="string">"fire"</span>,<span class="number">3.14</span>})
+assert(ls:pop()==<span class="number">3.14</span>)
+assert(ls:pop(<span class="number">2</span>)==<span class="string">"water"</span>)
+assert(ls:equals {<span class="string">"fire"</span>,<span class="string">"fire"</span>})
+assert(ls:count(<span class="string">"fire"</span>)==<span class="number">2</span>)
+assert(ls:count(<span class="string">"water"</span>)==<span class="number">0</span>)
+ls = <span class="keyword">List</span>({<span class="number">1</span>,<span class="number">6</span>,<span class="number">3</span>,<span class="number">8</span>,<span class="number">10</span>})
+ls:reverse()
+assert(ls:equals {<span class="number">10</span>,<span class="number">8</span>,<span class="number">3</span>,<span class="number">6</span>,<span class="number">1</span>})
+local min,max = ls:minmax()
+assert(min==<span class="number">1</span> <span class="keyword">and</span> max==<span class="number">10</span>)
+assert(ls:len()==<span class="number">5</span>)
+<span class="keyword">clone</span> = ls:<span class="keyword">clone</span>()
+assert(<span class="keyword">clone</span>==ls)
+<span class="keyword">clone</span>[<span class="number">1</span>]=<span class="number">20</span>
+assert(<span class="keyword">clone</span>~=ls)
+assert(ls:equals {<span class="number">10</span>,<span class="number">8</span>,<span class="number">3</span>,<span class="number">6</span>,<span class="number">1</span>})
+assert(<span class="keyword">clone</span>:equals {<span class="number">20</span>,<span class="number">8</span>,<span class="number">3</span>,<span class="number">6</span>,<span class="number">1</span>})</code></pre>
+<h6>Coroutines</h6>
+<p>Coroutines are independent threads of execution inside a single Lua VM.
+
+</p>
+<p>The coroutine API consists of the following functions:
+
+</p>
+<style>
+  #coroutine-api td, #coroutine-api th {
+    vertical-align: top;
+  }
+</style>
+
+<table id="coroutine-api">
+  <tr>
+    <th>API function</th>
+    <th>Purpose</th>
+  </tr>
+  <tr>
+    <td><code>coroutine.create(f)</code></td>
+    <td>create a new coroutine (<code>f</code> will be its main function)</td>
+  </tr>
+  <tr>
+    <td><code>coroutine.resume(co,...)</code></td>
+    <td>start/resume a coroutine</td>
+  </tr>
+  <tr>
+    <td><code>coroutine.running()</code></td>
+    <td>returns the currently running coroutine (<code>nil</code> when called by the main thread)</td>
+  </tr>
+  <tr>
+    <td><code>coroutine.status(co)</code></td>
+    <td><code>&quot;running&quot;</code> / <code>&quot;suspended&quot;</code> / <code>&quot;normal&quot;</code> / <code>&quot;dead&quot;</code></td>
+  </tr>
+  <tr>
+    <td><code>coroutine.wrap(f)</code></td>
+    <td>create a coroutine and wrap it inside a function which resumes it when called</td>
+  </tr>
+  <tr>
+    <td><code>coroutine.yield(...)</code></td>
+    <td>suspends execution of the current coroutine</td>
+  </tr>
+</table>
+
+<p>A coroutine created with <code>coroutine.create(f)</code> is initially in the <code>&quot;suspended&quot;</code> state. You can start it with <code>coroutine.resume(co,...)</code>, which is similar to a simple call of its main function <code>f</code>. The difference is that normal functions can only return by invoking <code>return</code> or <code>error</code> (implicitly or explicitly), while coroutines can also return with <code>coroutine.yield(...)</code> and do that from any location in <code>f</code>&apos;s call graph.
+
+</p>
+<p>Upon the execution of <code>coroutine.yield(...)</code>, the state of the current coroutine gets &quot;frozen&quot; and control gets back to the code which executed <code>coroutine.resume</code>. The arguments passed to <code>coroutine.yield(...)</code> are returned by <code>coroutine.resume</code> in the same way as values passed to a simple <code>return</code> statement are returned by the corresponding function call.
+
+</p>
+<p>Coroutines that have yielded can be continued exactly at the point where they yielded by calling <code>coroutine.resume</code> again. The extra arguments passed to <code>coroutine.resume(co,...)</code> become return values of the corresponding <code>coroutine.yield(...)</code> call inside the coroutine.
+
+</p>
+<p>A coroutine that has been resumed can call <code>coroutine.resume</code> itself. A coroutine that is waiting for its own <code>coroutine.resume</code> call to return (or yield) is in the <code>&quot;normal&quot;</code> state (= active but not <code>&quot;running&quot;</code>). A <code>&quot;dead&quot;</code> coroutine is one which finished execution, either normally (main function returned) or because of an error.
+
+</p>
+<p>The purpose - ok, one possible purpose - of <code>coroutine.wrap</code> is to create a function suitable for use as an iterator in a <code>for..in</code> loop. Using <code>coroutine.yield</code>, the iterator function doesn&apos;t have to adapt to the idiosyncrasies of the <code>for..in</code> loop: it can just gather the values and yield them one by one as they arrive.
+
+</p>
+<p>Hopefully all of this will become reasonably clear after studying the following - rather elaborate - code example:
+
+</p>
+<pre><code class="Lua">local <span class="keyword">function</span> _dirfiles(dir)
+   local dirs = {}
+   local files = {}
+   local append = table.insert
+   <span class="keyword">for</span> f in ldir(dir) <span class="keyword">do</span>
+      <span class="keyword">if</span> f ~= <span class="string">'.'</span> <span class="keyword">and</span> f ~= <span class="string">'..'</span> then
+         local p = path.join(dir,f)
+         local mode = path.attrib(p,<span class="string">'mode'</span>)
+         <span class="keyword">if</span> mode==<span class="string">'directory'</span> then
+            append(dirs,f)
+         <span class="keyword">else</span>
+            append(files,f)
+         end
+      end
+   end
+   <span class="keyword">return</span> dirs,files
+end</code></pre>
+<p>This helper function takes the path of a  directory, scans this directory and returns the names of directories and files it finds as a pair of tables.
+
+</p>
+<p>The <code>ldir</code>, <code>path.join</code> and <code>path.attrib</code> functions are not standard Lua: <code>ldir(dir)</code> returns an iterator for directory entries in <code>dir</code>, <code>path.join</code> joins its arguments (path components) using the default path separator, and <code>path.attrib(p,&apos;mode&apos;)</code> returns <code>&apos;directory&apos;</code> or <code>&apos;file&apos;</code> depending on the type of <code>p</code>.
+
+</p>
+<pre><code class="Lua">local <span class="keyword">function</span> _walker(root)
+   local dirs,files = _dirfiles(root)
+   <span class="keyword">for</span> i,d in ipairs(dirs) <span class="keyword">do</span>
+      _walker(path.join(root,d))
+   end
+   coroutine.yield(root,dirs,files)
+end
+
+<span class="keyword">function</span> walk(root)
+   <span class="keyword">return</span> coroutine.wrap(<span class="keyword">function</span> () _walker(root) end)
+end</code></pre>
+<p>The <code>walk</code> function takes a directory path and returns an iterator (actually a wrapped coroutine) which can be used to go over all files and directories under this path, recursively.
+
+</p>
+<p>Let&apos;s see how we could use <code>walk</code> in practice:
+
+</p>
+<pre><code class="Lua"><span class="keyword">function</span> rmtree(fullpath)
+   <span class="keyword">for</span> root,dirs,files in walk(fullpath) <span class="keyword">do</span>
+      <span class="keyword">for</span> i,f in ipairs(files) <span class="keyword">do</span>
+         remove(path.join(root,f))
+      end
+      rmdir(root)
+   end
+end</code></pre>
+<p>The <code>rmtree</code> function does the same as what <code>rm -rf</code> would do in a shell. <code>remove</code> removes a file, <code>rmdir</code> removes a non-empty directory (these are not standard Lua).
+
+</p>
+<p>The iterator <code>walk(fullpath)</code> returns a <code>root,dirs,files</code> tuple for every directory it encounters. As <code>rmdir</code> can remove <code>root</code> only if it&apos;s empty, we have to return (and remove) the files on the bottom level first (this is known as depth-first search). If we wanted to visit directories in a top-down fashion instead (also known as breadth-first search), we&apos;d have to change the position of the yield in <code>_walker</code>&apos;s code:
+
+</p>
+<pre><code class="Lua">local <span class="keyword">function</span> _walker(root)
+   local dirs,files = _dirfiles(root)
+   coroutine.yield(root,dirs,files)
+   <span class="keyword">for</span> i,d in ipairs(dirs) <span class="keyword">do</span>
+      _walker(path.join(root,d))
+   end
+end</code></pre>
+<p>Contemplate this until you see the light.
+
+</p>
+<p>Here is an all-in-one example for the same thing, approached from a slightly different angle:
+
+</p>
+<pre><code class="Lua"><span class="keyword">function</span> dirtree(d)
+   local exists, isdir = path.exists, path.isdir
+   local sep = path.sep
+
+   local <span class="keyword">function</span> yieldtree(dir)
+      <span class="keyword">for</span> entry in ldir(dir) <span class="keyword">do</span>
+         <span class="keyword">if</span> entry ~= <span class="string">"."</span> <span class="keyword">and</span> entry ~= <span class="string">".."</span> then
+            entry = dir .. sep .. entry
+            <span class="keyword">if</span> exists(entry) then  -- Just in <span class="keyword">case</span> a symlink is broken.
+               local is_dir = isdir(entry)
+               yield(entry,is_dir)
+               <span class="keyword">if</span> is_dir then
+                  yieldtree(entry)
+               end
+            end
+         end
+      end
+   end
+
+   <span class="keyword">return</span> coroutine.wrap(<span class="keyword">function</span>() yieldtree(d) end)
+end</code></pre>
+<h6>Chunks</h6>
+<p>Before discussing our last topic - the module system -, I must introduce you to the concept of <em>chunks</em>.
+
+</p>
+<p>In Lua, there are three functions that deal with loading (and possibly executing) source code:
+
+</p>
+<ol>
+<li><code>dofile(filename)</code> loads the given file, compiles it into a chunk and executes it</li>
+<li><code>loadfile(filename)</code> loads the given file, compiles it and returns it as a chunk</li>
+<li><code>loadstring(string)</code> compiles the given string and returns it as a chunk</li>
+</ol>
+<p>(There is also the lower-level <code>load(func)</code> which can be used to load the source code incrementally, in pieces.)
+
+</p>
+<p>The code obtained from any of these sources gets compiled as if it were the body of an anonymous function, and the resulting function is called a <em>chunk</em>.
+
+</p>
+<p>As an example, if you create a file <code>chunk.lua</code> with the following contents:
+
+</p>
+<pre><code class="Lua"><span class="keyword">function</span> add(x,y) <span class="keyword">return</span> x+y end
+<span class="keyword">function</span> mul(x,y) <span class="keyword">return</span> x*y end
+
+local a,b = ...
+<span class="keyword">return</span> add(a,b),mul(a,b)</code></pre>
+<p>Then you can compile it into a chunk and then call it like this:
+
+</p>
+<pre><code class="Lua">local f = loadfile("chunk.lua")
+local res = {f(3,4)}
+assert(res[1]==7)
+assert(res[2]==12)</code></pre>
+<p>Note: the functions <code>add</code> and <code>mul</code> spring into existence when we call <code>f</code>: their prototypes - which were compiled when <code>chunk.lua</code> was parsed - are instantiated into two closures which are bound into the global environment under the <code>add</code> and <code>mul</code> keys.
+
+</p>
+<p>As you see, a chunk can take arguments - through <code>...</code> - and return values just like any ordinary function.
+
+</p>
+<h6>Modules</h6>
+<p>In Lua, modules - also known as packages or namespaces - are implemented as tables.
+
+</p>
+<p>The source code of a module is placed into a separate source file (typically <code>&lt;modname&gt;.lua</code>).
+
+</p>
+<p>The module file looks something like this:
+
+</p>
+<pre><code class="Lua">-- mymodule.lua
+
+local mymodule = {}
+
+<span class="keyword">function</span> mymodule.f() ... end
+<span class="keyword">function</span> mymodule.g() ... end
+<span class="keyword">function</span> mymodule.h() ... end
+
+<span class="keyword">return</span> mymodule</code></pre>
+<p>and imported like this (in first approximation):
+
+</p>
+<pre><code class="Lua">local mymodule = dofile("mymodule.lua")
+mymodule.g()</code></pre>
+<p>The problem with this approach is that modules are not cached: any time you <code>dofile</code> them, they are loaded and executed again.
+
+</p>
+<p>Lua provides the following mechanism to deal with this:
+
+</p>
+<p>The global table <code>package.loaded</code> contains already loaded modules (module name =&gt; return value of module chunk).
+
+</p>
+<p>The global function <code>require(modname)</code> checks whether the module has been already loaded. If it finds a value at <code>package.loaded[modname]</code>, that value is returned. Otherwise it tries to load module <code>modname</code> using a set of <em>loaders</em> (see the <a href="http://www.lua.org/manual/5.1/manual.html#5.3">manual</a> for details). If the load succeeds, the module chunk is executed and the result value is placed into <code>package.loaded[modname]</code>. Finally, the value at <code>package.loaded[modname]</code> is returned to the caller.
+
+</p>
+<p>There is one last little detail to be aware of: the <code>package.path</code> variable which tells <code>require</code> where it should look for modules:
+
+</p>
+<pre><code class="Lua">./?.lua;/usr/share/luajit-2.0.0/?.lua;/usr/local/share/lua/5.1/?.lua;/usr/local/share/lua/5.1/?/init.lua;/usr/share/lua/5.1/?.lua;/usr/share/lua/5.1/?/init.lua</code></pre>
+<p>(This is LuaJIT&apos;s default value on my machine.)
+
+</p>
+<p><code>require(modname)</code> splits this string at <code>;</code> separators to get a list of paths to try, and replaces each <code>?</code> with <code>modname</code>.
+
+</p>
+<p>Relative paths are relative to the current working directory (<em>not</em> to the location of the source file calling <code>require</code>).
+
+</p>
+<h5>Tying loose ends</h5>
+<p>If you want to get a complete picture of Lua, read up on the following topics in the <a href="http://www.lua.org/manual/5.1/manual.html">Lua manual</a>:
+
+</p>
+<ul>
+<li>bracketed (long) comments and string literals</li>
+<li>numeric literals formats (decimal, scientific, hex)</li>
+<li>rules of automatic coercion between strings and numbers</li>
+<li>the necessity of explicit blocks for <code>return</code> and <code>break</code> (when used in the middle of another block)</li>
+<li>interpolation of function return values and <code>...</code><ul>
+<li>in the middle of a list</li>
+<li>at the end of a list</li>
+<li>within parentheses</li>
+</ul>
+</li>
+<li>the lack of automatic type conversion in equality comparisons</li>
+<li>the exact semantics of the <code>#</code> (length-of) operator when used on tables</li>
+<li>precedence of operators</li>
+<li>tail calls</li>
+<li>the exact semantics of metatables and metamethods</li>
+<li>garbage collection, weak tables</li>
+<li>standard libraries</li>
+<li>the C API (not really needed as LuaJIT has a great FFI)</li>
+</ul>
+<p>In the next part, I will introduce the LuaJIT FFI by building an example application which binds to the EGL and OpenVG libraries to draw something tangible on the screen.
+
+</p>
+<p>Stay tuned.
+</p>
+</section>
+        </article>
+      </div>
+      <footer>
+        <div class="inner">
+          <p>&nbsp;</p>
+        </div>
+      </footer>
+    </div>
+  </body>
+</html>
