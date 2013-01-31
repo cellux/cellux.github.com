@@ -1216,6 +1216,7 @@ mymodule.g()&lt;/code&gt;&lt;/pre&gt;
 &lt;li&gt;tail calls&lt;/li&gt;
 &lt;li&gt;the exact semantics of metatables and metamethods&lt;/li&gt;
 &lt;li&gt;garbage collection, weak tables&lt;/li&gt;
+&lt;li&gt;module API&lt;/li&gt;
 &lt;li&gt;standard libraries&lt;/li&gt;
 &lt;li&gt;the C API (not really needed as LuaJIT has a great FFI)&lt;/li&gt;
 &lt;/ul&gt;
