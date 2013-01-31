@@ -29,13 +29,13 @@
       <div id="content">
         <article class="post">
           <h4>Introduction to LuaJIT [1/2]</h4>
-          <section class="content"><p>Now that we have <a href="http://cellux.github.com/articles/diy-linux-with-buildroot-part-1/">our own Linux system</a> to work on, we can start writing programs for the Pi.
+          <section class="content"><p>Now that we have <a href="/articles/diy-linux-with-buildroot-part-1/">our own Linux system</a> to work on, we can start writing programs for the Pi.
 
 </p>
 <p>After much investigation, I decided to write these programs in <a href="http://www.lua.org/">Lua</a> - more exactly <a href="http://www.luajit.org/">LuaJIT</a>, a highly optimized implementation of the original Lua 5.1 VM developed by a single person, Mike Pall, who - based on his work - seems to be nothing short of a genius. This guy implemented a just-in-time compiler for Lua which can compile Lua bytecode straight into optimized machine code on the x86/x64, PPC, MIPS <em>and ARM</em> architectures. Furthermore, he added an excellent foreign function interface which makes it a breeze to interface Lua code with C libraries.
 
 </p>
-<p>As LuaJIT is already included in the Buildroot distribution, it takes just the flip of a switch to install it into our root fs (see my <a href="http://cellux.github.com/articles/diy-linux-with-buildroot-part-1/">Buildroot article</a> for details). There is one catch though: Buildroot 2012.11.1 contains a late beta version of LuaJIT, not the final 2.0.0. If you want the final version, you should clone the <a href="git://git.buildroot.net/buildroot">Buildroot GitHub repository</a> and replace the <code>buildroot-2012.11.1/package/luajit</code> folder with the version from the master branch before running <code>make</code>.
+<p>As LuaJIT is already included in the Buildroot distribution, it takes just the flip of a switch to install it into our root fs (see my <a href="/articles/diy-linux-with-buildroot-part-1/">Buildroot article</a> for details). There is one catch though: Buildroot 2012.11.1 contains a late beta version of LuaJIT, not the final 2.0.0. If you want the final version, you should clone the <a href="git://git.buildroot.net/buildroot">Buildroot GitHub repository</a> and replace the <code>buildroot-2012.11.1/package/luajit</code> folder with the version from the master branch before running <code>make</code>.
 
 </p>
 <p>The LuaJIT package installs the following files to the root fs:
