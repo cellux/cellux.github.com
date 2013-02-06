@@ -409,7 +409,10 @@ $(eval $(cmake-package))</code></pre>
  <span class="comment">#endif</span>
 +<span class="comment">#endif</span>
  }</code></pre>
-<p>(If you don&apos;t want to fiddle with copy/pasting these files, just fetch them from my Git repository at <a href="https://github.com/cellux/rpi-buildroot">https://github.com/cellux/rpi-buildroot</a>)
+<p>(Note: a fix for this has been merged to upstream on Jan 22 2013 which made this patch unnecessary.)
+
+</p>
+<p>If you don&apos;t want to fiddle with copy/pasting these files, just fetch them from my Git repository at <a href="https://github.com/cellux/rpi-buildroot">https://github.com/cellux/rpi-buildroot</a>
 
 </p>
 <p>Now execute <code>make menuconfig</code>, enable the new package(s), <code>make</code> the whole thing and unpack the resulting <code>bootfs.tar.gz</code> and <code>rootfs.tar.gz</code> (as root) to the correct places.
