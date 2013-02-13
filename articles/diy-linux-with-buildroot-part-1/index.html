@@ -119,9 +119,13 @@ tar xvzf buildroot-<span class="number">2012.11</span>.<span class="number">1</s
     <th>GCC compiler Version</th>
     <td><code>GCC 4.7.x</code></td>
   </tr>
+  <tr>
+    <th>Additional gcc options</th>
+    <td><code>--with-float=hard --with-fpu=vfp</code></td>
+  </tr>
 </table>
 
-<p>We&apos;ll use the latest <code>rpi-3.6.y</code> kernel branch from the <a href="https://github.com/raspberrypi/linux">foundation&apos;s git repository</a>, so here we select matching kernel headers.
+<p>We&apos;ll use the latest <code>rpi-3.6.y</code> kernel branch from the <a href="https://github.com/raspberrypi/linux">foundation&apos;s git repository</a>, so here we select matching kernel headers. The additional GCC options are required for hardfp.
 
 </p>
 <table class="dl">
@@ -146,6 +150,10 @@ tar xvzf buildroot-<span class="number">2012.11</span>.<span class="number">1</s
   <tr>
     <th>Use software floating point by default</th>
     <td><code>NO</code></td>
+  </tr>
+  <tr>
+    <th>Target Optimizations</th>
+    <td><code>-pipe -mfloat-abi=hard -mfpu=vfp</code></td>
   </tr>
   <tr>
     <th>Use ARM Vector Floating Point unit</th>
