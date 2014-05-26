@@ -79,14 +79,16 @@ mount -t ext4 -o loop /mnt/shares/samsung/rpifs.img /mnt/shares/rpifs</code></pr
 <p>(These were all executed on the router. I added the <code>opkg install</code> commands to let you see which OpenWRT packages were required. Of course the mounts were later recorded into <code>/etc/config/fstab</code> for auto-mounting.)
 
 </p>
-<p>While this setup is rather complicated and slow, it works. Ideally, the external disks would form a RAID1 cluster (provided by a NAS device like <a href="http://www.fantec.de/html/en/2/artId/__1515/gid/__500905309053790537290/article.html">this</a>), and the RAID volume would be formatted with ext4 (which is <em>much</em> faster than <code>ntfs-3g</code> on Linux).
+<p>While this setup is rather complicated and slow, it works. Ideally, the external disks would form a RAID1 cluster (provided by a NAS device like <a href="http://www.fantec.eu/html/en/2/artId/__1515/gid/__500905309053790537290/article.html">this</a>), and the RAID volume would be formatted with ext4 (which is <em>much</em> faster than <code>ntfs-3g</code> on Linux).
 
 </p>
-<p>The next step was to create a suitable root filesystem on <code>/mnt/shares/rpifs</code>. At first, I just used the files from the default Raspbian installation:
+<p>The next step was to place a suitable root filesystem on <code>/mnt/shares/rpifs</code>. At first, I just used the files from the default Raspbian installation:
 
 </p>
 <pre><code class="bash">mkdir /tmp/raspbian
-mount -t ext4 -o loop,offset=$((122880*512)) 2012-12-16-wheezy-raspbian.img /tmp/raspbian/
+mount -t ext4 -o loop,offset=$((122880*512)) \
+  2012-12-16-wheezy-raspbian.img \
+  /tmp/raspbian/
 rsync -av /tmp/raspbian/ /mnt/shares/rpifs/</code></pre>
 <p>This crazy <code>mount</code> (or rather <code>losetup</code>) trick allows you to mount a <em>part</em> of a disk image - like one of the partitions inside - via a loop device. To make it work, you have to find out where the desired partition starts (byte offset from start of image file) and pass that to mount via the <code>offset</code> option. You can use <code>fdisk</code> to find the right number:
 
@@ -105,19 +107,22 @@ Disk identifier: 0x00017b69
 <p>(For some reason, this <code>fdisk</code> invocation doesn&apos;t provide the correct results on older distributions, like Ubuntu 10.04 Lucid Lynx. It does work on a recent Arch Linux, though. Perhaps a bug in <code>fdisk</code>?)
 
 </p>
-<p>As you can see, the FAT32 partition (<code>/boot</code>) comes first, starting at sector #8192, then comes the ext4 fs (<code>/</code>) at sector #122880. As each sector uses 512 bytes, we&apos;ll have to multiply the sector number by 512 to get the byte offset.
+<p>As you can see, the FAT32 partition (<code>/boot</code>) comes first, starting at sector #8192, then comes the ext4 fs (<code>/</code>) at sector #122880. As each sector uses 512 bytes, we&apos;ll have to multiply the sector number by 512 to get the byte offset of the root partition.
 
 </p>
 <p>The only thing left was telling the Pi Linux kernel that it should mount its root fs from the router over NFS, instead of locally from the SD card.
 
 </p>
-<p>As I wrote in the <a href="/articles/my-first-day-with-the-raspberry-pi/">previous</a> post, the Linux kernel gets its command line from the file <code>cmdline.txt</code> on the <code>/boot</code> partition (first FAT32 partition of the SD card).
+<p>As I wrote in the <a href="../my-first-day-with-the-raspberry-pi/">previous</a> post, the Linux kernel gets its command line from the file <code>cmdline.txt</code> on the <code>/boot</code> partition (first FAT32 partition of the SD card).
 
 </p>
-<p>In the Raspbian image which I downloaded, this file has the following contents (also verifiable with the offset mount trick):
+<p>In the Raspbian image which I downloaded, this file has the following contents:
 
 </p>
 <pre><code>dwc_otg.lpm_enable=0 console=ttyAMA0,115200 kgdboc=ttyAMA0,115200 console=tty1 root=/dev/mmcblk0p2 rootfstype=ext4 elevator=deadline rootwait</code></pre>
+<p>(all on one line)
+
+</p>
 <p>This had to be changed like this:
 
 </p>
